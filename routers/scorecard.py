@@ -1,13 +1,19 @@
 """
-Manual ticket scorecard — paste any ticket, get a structured QA evaluation.
+Ticket scorecard — works from tickets already stored in the DB.
+Uses the stored conversation thread + ticket metadata as the ONLY source of truth.
 """
 import json
 import re
-from fastapi import APIRouter, Depends
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 from anthropic import AsyncAnthropic
+
 from config import settings
-from models import User
+from database import get_db
+from models import User, Ticket, Message, Evaluation
 from routers.auth import current_user
 
 router = APIRouter()
@@ -15,44 +21,64 @@ _client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
 SYSTEM = (
     "You are a senior Quality Assurance analyst in Customer Care. "
-    "Evaluate the provided support ticket and return ONLY valid JSON — "
-    "no markdown, no preamble, no trailing text. "
-    "Every field is required. Keep rationale strings concise (under 120 chars each)."
+    "Evaluate the support ticket interaction STRICTLY based on the provided ticket data. "
+    "Do NOT assume, infer, or invent any information not present in the ticket. "
+    "If something is missing or unclear, state: 'Not enough data in ticket'. "
+    "Return ONLY valid JSON — no markdown, no preamble, no trailing text."
 )
 
-PROMPT = """Evaluate this support ticket on the 10 QA dimensions below.
-Score each 1–5 (1=poor, 2=below expectations, 3=acceptable, 4=strong, 5=excellent).
-Return this exact JSON structure filled in:
+PROMPT = """## Data Context (Critical Instruction)
+The support ticket below is the ONLY source of truth.
+- ONLY use the provided ticket data
+- Do NOT assume, infer, or invent information not found in the ticket
+- If information is missing, state: "Not enough data in ticket"
+- Be objective, evidence-based, and commercially aware
 
-{
-  "categories": {
-    "understanding_of_issue":       {"score": 0, "rationale": ""},
-    "accuracy_of_solution":         {"score": 0, "rationale": ""},
-    "completeness_of_response":     {"score": 0, "rationale": ""},
-    "clarity_of_communication":     {"score": 0, "rationale": ""},
-    "tone_and_empathy":             {"score": 0, "rationale": ""},
-    "efficiency":                   {"score": 0, "rationale": ""},
-    "ownership":                    {"score": 0, "rationale": ""},
-    "proactivity":                  {"score": 0, "rationale": ""},
-    "customer_confidence_created":  {"score": 0, "rationale": ""},
-    "risk_of_repeat_contact":       {"score": 0, "rationale": ""}
-  },
+## Ticket Metadata
+Subject: {subject}
+Agent: {agent}
+Group: {group}
+CSAT: {csat}
+Created: {created}
+Resolved: {resolved}
+Tags: {tags}
+SLA breached: {sla}
+
+## Conversation Thread ({msg_count} messages)
+{thread}
+
+## Instructions
+Score each of the 10 dimensions from 1–5:
+- 1 = poor, 2 = below expectations, 3 = acceptable, 4 = strong, 5 = excellent
+- risk_of_repeat_contact: 5 = very low risk, 1 = near-certain repeat contact
+
+Return this EXACT JSON (no other text):
+{{
+  "categories": {{
+    "understanding_of_issue":       {{"score": 0, "rationale": ""}},
+    "accuracy_of_solution":         {{"score": 0, "rationale": ""}},
+    "completeness_of_response":     {{"score": 0, "rationale": ""}},
+    "clarity_of_communication":     {{"score": 0, "rationale": ""}},
+    "tone_and_empathy":             {{"score": 0, "rationale": ""}},
+    "efficiency":                   {{"score": 0, "rationale": ""}},
+    "ownership":                    {{"score": 0, "rationale": ""}},
+    "proactivity":                  {{"score": 0, "rationale": ""}},
+    "customer_confidence_created":  {{"score": 0, "rationale": ""}},
+    "risk_of_repeat_contact":       {{"score": 0, "rationale": ""}}
+  }},
   "average_score": 0.0,
   "verdict": "Acceptable",
   "strengths": ["", ""],
   "weaknesses": ["", ""],
   "final_comment": ""
-}
+}}
 
 Rules:
-- verdict must be one of: Excellent / Strong / Acceptable / Weak / Poor
-- risk_of_repeat_contact: score 5 = very low risk, score 1 = near-certain repeat
-- average_score = mean of all 10 category scores, rounded to 1 decimal
-- strengths/weaknesses: 2–4 items each, grounded in ticket content
-- final_comment: 3–5 sentences, sharp and useful for a support leadership team
-
-TICKET:
-{ticket}"""
+- verdict: Excellent (≥4.5) / Strong (≥3.8) / Acceptable (≥2.8) / Weak (≥2.0) / Poor (<2.0)
+- average_score = mean of all 10 scores, rounded to 1 decimal
+- strengths/weaknesses: 2–4 items each, grounded ONLY in what the ticket shows
+- final_comment: 3–5 sharp sentences useful for a support leadership team
+"""
 
 
 def _repair(txt: str) -> str:
@@ -62,43 +88,95 @@ def _repair(txt: str) -> str:
     return txt.strip()
 
 
+def _build_thread(messages: list) -> str:
+    if not messages:
+        return "No conversation messages available."
+    lines = []
+    for m in messages:
+        ts = str(m.ts or "")[:16].replace("T", " ")
+        body = (m.body or "").strip()[:800]
+        lines.append(f"[{m.role}] {ts}\n{body}")
+    return "\n\n---\n\n".join(lines)
+
+
 class ScorecardRequest(BaseModel):
-    ticket: str
+    ticket_id: str
 
 
 @router.post("/")
 async def generate_scorecard(
     body: ScorecardRequest,
     user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    if len(body.ticket.strip()) < 20:
-        return {"error": "Ticket text is too short to evaluate."}
+    # Load ticket
+    ticket_result = await db.execute(
+        select(Ticket).where(
+            Ticket.id == body.ticket_id,
+            Ticket.user_id == user.id
+        )
+    )
+    ticket = ticket_result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+
+    # Load messages
+    msg_result = await db.execute(
+        select(Message).where(
+            Message.ticket_id == body.ticket_id,
+            Message.user_id == user.id
+        ).order_by(Message.ts.asc())
+    )
+    messages = msg_result.scalars().all()
+
+    if not messages:
+        raise HTTPException(422, "No conversation data available for this ticket. Run analysis first to load messages.")
+
+    thread = _build_thread(messages)
+
+    prompt = PROMPT.format(
+        subject=ticket.subject or "Not available",
+        agent=ticket.agent_name or "Not available",
+        group=ticket.group_name or "Not available",
+        csat=str(ticket.csat) if ticket.csat else "Not available",
+        created=str(ticket.created_at or "")[:10] or "Not available",
+        resolved=str(ticket.resolved_at or "")[:10] or "Not available",
+        tags=", ".join(ticket.tags or []) or "None",
+        sla="Yes" if ticket.fr_escalated else "No",
+        msg_count=len(messages),
+        thread=thread[:5000],
+    )
 
     response = await _client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1800,
+        max_tokens=2000,
         temperature=0,
         system=SYSTEM,
-        messages=[{"role": "user", "content": PROMPT.format(ticket=body.ticket[:6000])}],
+        messages=[{"role": "user", "content": prompt}],
     )
     raw = response.content[0].text
     data = json.loads(_repair(raw))
 
-    # Recalculate average server-side for safety
+    # Recalculate average server-side
     scores = [v["score"] for v in data["categories"].values()]
-    data["average_score"] = round(sum(scores) / len(scores), 1)
+    avg = round(sum(scores) / len(scores), 1)
+    data["average_score"] = avg
 
-    # Map verdict from score if not set correctly
-    avg = data["average_score"]
-    if avg >= 4.5:
-        data["verdict"] = "Excellent"
-    elif avg >= 3.8:
-        data["verdict"] = "Strong"
-    elif avg >= 2.8:
-        data["verdict"] = "Acceptable"
-    elif avg >= 2.0:
-        data["verdict"] = "Weak"
-    else:
-        data["verdict"] = "Poor"
+    # Set verdict from score
+    if avg >= 4.5:   data["verdict"] = "Excellent"
+    elif avg >= 3.8: data["verdict"] = "Strong"
+    elif avg >= 2.8: data["verdict"] = "Acceptable"
+    elif avg >= 2.0: data["verdict"] = "Weak"
+    else:            data["verdict"] = "Poor"
+
+    # Include ticket metadata in response
+    data["ticket_meta"] = {
+        "id": body.ticket_id,
+        "subject": ticket.subject,
+        "agent": ticket.agent_name,
+        "group": ticket.group_name,
+        "csat": ticket.csat,
+        "msg_count": len(messages),
+    }
 
     return data

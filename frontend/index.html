@@ -220,18 +220,45 @@ tbody td{padding:7px 9px;vertical-align:top}
 
 <!-- MANUAL REVIEW -->
 <div class="tab-content" id="tab-score">
-  <div class="panel"><h3>Manual Ticket Scorecard</h3>
-    <p style="font-size:13px;color:var(--dim);margin-bottom:14px;line-height:1.7">
-      Paste a raw support ticket (customer + agent messages) and generate a structured QA scorecard using Claude Sonnet.
+  <div class="panel"><h3>Manual Ticket Review</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.7">
+      Select any ticket already loaded in the system. The scorecard is generated strictly from its stored conversation — no assumptions, no invented data.
     </p>
-    <div class="f" style="margin-bottom:12px">
-      <label>Ticket Content</label>
-      <textarea id="sc-ticket" placeholder="Paste the full ticket conversation here — customer messages, agent replies, any context..." style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%;min-height:220px;resize:vertical;line-height:1.6;transition:border-color .2s" onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
+
+    <!-- Search / filter -->
+    <div class="fr" style="margin-bottom:12px">
+      <div class="f">
+        <label>Search Ticket</label>
+        <input id="sc-search" type="text" placeholder="Ticket ID, agent name, or subject..." oninput="scFilter()" style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:8px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%;transition:border-color .2s" onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--bdr)'"/>
+      </div>
+      <div class="f">
+        <label>Agent</label>
+        <select id="sc-agent-filter" onchange="scFilter()" style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:8px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%">
+          <option value="">All agents</option>
+        </select>
+      </div>
     </div>
-    <button class="btn btn-primary" style="width:auto;margin:0" onclick="runScorecard()" id="sc-btn">
+
+    <!-- Ticket list -->
+    <div id="sc-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--bg);margin-bottom:14px">
+      <div style="padding:20px;text-align:center;color:var(--dim);font-size:13px">
+        Load tickets via the Runs tab first, then return here to review them.
+      </div>
+    </div>
+
+    <!-- Selected ticket pill -->
+    <div id="sc-selected-pill" style="display:none;margin-bottom:14px;padding:10px 14px;background:rgba(91,106,240,.1);border:1px solid rgba(91,106,240,.3);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--ac)">Selected: </span>
+        <span id="sc-selected-label" style="font-size:13px"></span>
+      </div>
+      <button onclick="scClear()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px">✕</button>
+    </div>
+
+    <button class="btn btn-primary" style="width:auto;margin:0" onclick="runScorecard()" id="sc-btn" disabled>
       ✦ Generate Scorecard
     </button>
-    <div id="sc-result" style="margin-top:20px;display:none"></div>
+    <div id="sc-result" style="margin-top:22px;display:none"></div>
   </div>
 </div>
 
@@ -463,7 +490,7 @@ async function loadRunsForExport() {
 // ═══════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════
-function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); }
+function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); scInit(); }
 
 function getCat(ev, cat) {
   const s = ev.scores || {};
@@ -646,21 +673,103 @@ async function showTicket(tid) {
 // ═══════════════════════════════════════════════════════════
 // EXPORT — direct download via API
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// MANUAL REVIEW
+// ═══════════════════════════════════════════════════════════
+let _scSelectedId = null;
+let _scFiltered = [];
+
+function scInit() {
+  // Populate agent filter + ticket list from _evals
+  const agentSel = document.getElementById('sc-agent-filter');
+  const agents = [...new Set(_evals.map(e => e.agent_name).filter(Boolean))].sort();
+  agentSel.innerHTML = '<option value="">All agents</option>' +
+    agents.map(a => `<option value="${a}">${a}</option>`).join('');
+  scFilter();
+}
+
+function scFilter() {
+  const q = (document.getElementById('sc-search')?.value || '').toLowerCase();
+  const ag = document.getElementById('sc-agent-filter')?.value || '';
+  _scFiltered = _evals.filter(e => {
+    const matchAgent = !ag || e.agent_name === ag;
+    const matchQ = !q ||
+      String(e.ticket_id).includes(q) ||
+      (e.agent_name||'').toLowerCase().includes(q) ||
+      (e.subject||'').toLowerCase().includes(q);
+    return matchAgent && matchQ;
+  });
+  scRenderList();
+}
+
+function scRenderList() {
+  const el = document.getElementById('sc-list');
+  if (!_evals.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim);font-size:13px">No tickets loaded. Run an analysis first via the Runs tab.</div>';
+    return;
+  }
+  if (!_scFiltered.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim);font-size:13px">No tickets match your filter.</div>';
+    return;
+  }
+  el.innerHTML = _scFiltered.slice(0, 100).map(e => {
+    const isSelected = e.ticket_id === _scSelectedId;
+    const scoreColor = e.total_score >= 75 ? 'var(--ok)' : e.total_score >= 55 ? 'var(--warn)' : 'var(--danger)';
+    return `<div onclick="scSelect('${e.ticket_id}')" style="padding:10px 14px;border-bottom:1px solid rgba(42,42,61,.4);cursor:pointer;transition:background .15s;${isSelected?'background:rgba(91,106,240,.12);':''}display:flex;align-items:center;gap:12px;justify-content:space-between" onmouseover="if('${e.ticket_id}'!==_scSelectedId)this.style.background='var(--s2)'" onmouseout="if('${e.ticket_id}'!==_scSelectedId)this.style.background=''">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--ac);margin-bottom:2px">#${e.ticket_id}</div>
+        <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.subject||'(no subject)'}</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:1px">${e.agent_name||'?'} · ${e.group_name||''}</div>
+      </div>
+      <div style="flex-shrink:0;text-align:right">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${scoreColor}">${e.total_score||'—'}</span>
+        ${e.churn_risk_flag ? '<div style="font-size:10px;color:var(--danger)">🚨 churn</div>' : ''}
+        ${isSelected ? '<div style="font-size:10px;color:var(--ac2)">✓ selected</div>' : ''}
+      </div>
+    </div>`;
+  }).join('') + (_scFiltered.length > 100 ? `<div style="padding:10px;text-align:center;font-size:11px;color:var(--dim)">${_scFiltered.length - 100} more — refine your search</div>` : '');
+}
+
+function scSelect(ticketId) {
+  _scSelectedId = ticketId;
+  const e = _evals.find(x => String(x.ticket_id) === String(ticketId));
+  const pill = document.getElementById('sc-selected-pill');
+  const label = document.getElementById('sc-selected-label');
+  pill.style.display = 'flex';
+  label.textContent = `#${ticketId} — ${e?.agent_name || '?'} · ${(e?.subject||'').slice(0,60)}`;
+  document.getElementById('sc-btn').disabled = false;
+  document.getElementById('sc-result').style.display = 'none';
+  scRenderList(); // re-render to show selection
+}
+
+function scClear() {
+  _scSelectedId = null;
+  document.getElementById('sc-selected-pill').style.display = 'none';
+  document.getElementById('sc-btn').disabled = true;
+  document.getElementById('sc-result').style.display = 'none';
+  scRenderList();
+}
+
 async function runScorecard() {
-  const ticket = document.getElementById('sc-ticket').value.trim();
-  if (!ticket) { alert('Please paste a ticket first.'); return; }
+  if (!_scSelectedId) return;
   const btn = document.getElementById('sc-btn');
-  btn.disabled = true; btn.innerHTML = '<div class="sp"></div> Analysing...';
+  btn.disabled = true;
+  btn.innerHTML = '<div class="sp"></div> Analysing with Claude Sonnet...';
   document.getElementById('sc-result').style.display = 'none';
 
   try {
-    const r = await apiFetch('/scorecard/', {method:'POST', body: JSON.stringify({ticket})});
-    if (!r || r.error) { alert(r?.error || 'Scorecard failed'); return; }
+    const r = await apiFetch('/scorecard/', {
+      method: 'POST',
+      body: JSON.stringify({ticket_id: String(_scSelectedId)})
+    });
+    if (!r) return;
+    if (r.detail) { alert('Error: ' + r.detail); return; }
     renderScorecard(r);
   } catch(e) {
     alert('Error: ' + e.message);
   } finally {
-    btn.disabled = false; btn.innerHTML = '✦ Generate Scorecard';
+    btn.disabled = false;
+    btn.innerHTML = '✦ Generate Scorecard';
   }
 }
 
@@ -677,64 +786,69 @@ function renderScorecard(d) {
     customer_confidence_created:'Customer Confidence Created',
     risk_of_repeat_contact:'Risk of Repeat Contact',
   };
-  const verdictColor = {Excellent:'var(--ok)',Strong:'var(--ok)',Acceptable:'var(--warn)',Weak:'var(--danger)',Poor:'var(--danger)'};
   const scoreColor = s => s>=4?'var(--ok)':s>=3?'var(--warn)':'var(--danger)';
   const scoreBg   = s => s>=4?'rgba(52,211,153,.15)':s>=3?'rgba(251,191,36,.15)':'rgba(248,113,113,.15)';
+  const verdictColor = {Excellent:'var(--ok)',Strong:'var(--ok)',Acceptable:'var(--warn)',Weak:'var(--danger)',Poor:'var(--danger)'};
 
-  const rows = Object.entries(d.categories).map(([key, v]) => `
-    <tr>
-      <td style="padding:8px 10px;font-size:12px">${LABELS[key]||key}</td>
-      <td style="padding:8px 10px;text-align:center">
+  const meta = d.ticket_meta || {};
+  const rows = Object.entries(d.categories||{}).map(([key, v]) => `
+    <tr style="border-bottom:1px solid rgba(42,42,61,.3)">
+      <td style="padding:9px 12px;font-size:12px;white-space:nowrap">${LABELS[key]||key}</td>
+      <td style="padding:9px 12px;text-align:center">
         <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
       </td>
-      <td style="padding:8px 10px;font-size:12px;color:var(--dim)">${v.rationale}</td>
+      <td style="padding:9px 12px;font-size:12px;color:var(--dim);line-height:1.5">${v.rationale}</td>
     </tr>`).join('');
 
-  const strengths = (d.strengths||[]).map(s=>`<li style="margin-bottom:4px">${s}</li>`).join('');
-  const weaknesses = (d.weaknesses||[]).map(s=>`<li style="margin-bottom:4px">${s}</li>`).join('');
+  const strengths  = (d.strengths||[]).map(s=>`<li style="margin-bottom:5px;font-size:12px">${s}</li>`).join('');
+  const weaknesses = (d.weaknesses||[]).map(s=>`<li style="margin-bottom:5px;font-size:12px">${s}</li>`).join('');
 
-  const html = `
-    <div style="border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:16px">
-      <div style="background:var(--s2);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-family:var(--disp);font-size:16px;font-weight:800">QA Scorecard</div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:2px">Generated by Claude Sonnet</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:var(--disp);font-size:28px;font-weight:800;color:${scoreColor(d.average_score)}">${d.average_score}<span style="font-size:14px;color:var(--dim)">/5</span></div>
-          <span style="padding:3px 12px;border-radius:10px;font-size:12px;font-weight:700;font-family:var(--mono);background:${scoreBg(d.average_score)};color:${verdictColor[d.verdict]||'var(--txt)'}">${d.verdict}</span>
-        </div>
+  const innerHTML = `
+    <!-- Header -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:15px;font-weight:800;margin-bottom:2px">QA Scorecard — #${meta.id||_scSelectedId}</div>
+        <div style="font-size:12px;color:var(--dim)">${meta.agent||''} · ${meta.group||''} · ${meta.msg_count||0} messages · CSAT: ${meta.csat||'—'}</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:2px;font-style:italic">${(meta.subject||'').slice(0,80)}</div>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="border-bottom:1px solid var(--bdr)">
-            <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:200px">Category</th>
-            <th style="padding:8px 10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:80px">Score</th>
-            <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Rationale</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:var(--disp);font-size:32px;font-weight:800;line-height:1;color:${scoreColor(d.average_score)}">${d.average_score}<span style="font-size:14px;color:var(--dim)">/5</span></div>
+        <span style="display:inline-block;margin-top:4px;padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;font-family:var(--mono);background:${scoreBg(d.average_score)};color:${verdictColor[d.verdict]||'var(--txt)'}">${d.verdict}</span>
       </div>
     </div>
 
+    <!-- Score table -->
+    <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+          <th style="padding:8px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:200px">Category</th>
+          <th style="padding:8px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:80px">Score</th>
+          <th style="padding:8px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Rationale (from ticket data only)</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <!-- Strengths / Weaknesses -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-      <div style="background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px">
+      <div style="background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:14px">
         <div style="font-family:var(--mono);font-size:10px;color:var(--ok);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✓ Strengths</div>
-        <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7">${strengths}</ul>
+        <ul style="margin:0;padding-left:16px;line-height:1.7">${strengths||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
       </div>
-      <div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;padding:14px">
-        <div style="font-family:var(--mono);font-size:10px;color:var(--danger);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✕ Weaknesses</div>
-        <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7">${weaknesses}</ul>
+      <div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--danger);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✕ Areas for Improvement</div>
+        <ul style="margin:0;padding-left:16px;line-height:1.7">${weaknesses||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
       </div>
     </div>
 
-    <div style="background:var(--s2);border:1px solid var(--bdr);border-left:3px solid var(--ac);border-radius:8px;padding:14px">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Final QA Comment</div>
+    <!-- Final comment -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-left:3px solid var(--ac);border-radius:8px;padding:16px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Final QA Comment</div>
       <p style="font-size:13px;line-height:1.8;margin:0">${d.final_comment}</p>
     </div>`;
 
   const el = document.getElementById('sc-result');
-  el.innerHTML = html;
+  el.innerHTML = innerHTML;
   el.style.display = 'block';
   el.scrollIntoView({behavior:'smooth', block:'start'});
 }
