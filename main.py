@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 
 from config import settings
 from database import init_db
-from routers import auth, runs, tickets, agents, export, scorecard
+from routers import auth, runs, tickets, agents, export, scorecard, agent_scorecard
 
 logging.basicConfig(
     level=logging.INFO,

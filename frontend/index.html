@@ -120,6 +120,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('runs')">Runs</div>
   <div class="tab" onclick="showTab('exp')">Export</div>
   <div class="tab" onclick="showTab('score')">Manual Review</div>
+  <div class="tab" onclick="showTab('agrev')">Agent Review</div>
 </div>
 
 <!-- OVERVIEW -->
@@ -217,6 +218,41 @@ tbody td{padding:7px 9px;vertical-align:top}
   </div>
 </div>
 </div>
+
+<!-- AGENT REVIEW -->
+<div class="tab-content" id="tab-agrev">
+  <div class="panel"><h3>Agent QA Scorecard</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.7">
+      Select an agent to generate a pattern-based QA scorecard across all their evaluated tickets. Powered by Claude Sonnet — strictly evidence-based, no invented data.
+    </p>
+
+    <div class="fr" style="margin-bottom:14px">
+      <div class="f">
+        <label>Agent</label>
+        <select id="agrev-agent" onchange="agrevOnSelect()" style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:8px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%">
+          <option value="">— Select agent —</option>
+        </select>
+      </div>
+      <div class="f">
+        <label>Filter by Run (optional)</label>
+        <select id="agrev-run" style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:8px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%">
+          <option value="">All runs</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Agent stats pill -->
+    <div id="agrev-stats" style="display:none;margin-bottom:14px;padding:12px 16px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px">
+      <div id="agrev-stats-content" style="font-size:12px;color:var(--dim)"></div>
+    </div>
+
+    <button class="btn btn-primary" style="width:auto;margin:0" onclick="runAgentScorecard()" id="agrev-btn" disabled>
+      ✦ Generate Agent Scorecard
+    </button>
+    <div id="agrev-result" style="margin-top:22px;display:none"></div>
+  </div>
+</div>
+
 
 <!-- MANUAL REVIEW -->
 <div class="tab-content" id="tab-score">
@@ -370,7 +406,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   if (id === 'runs') loadRunHistory();
@@ -490,7 +526,7 @@ async function loadRunsForExport() {
 // ═══════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════
-function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); scInit(); }
+function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); scInit(); agrevInit(); }
 
 function getCat(ev, cat) {
   const s = ev.scores || {};
@@ -876,6 +912,180 @@ async function doExport(fmt, churnOnly = false) {
     URL.revokeObjectURL(a.href);
   } catch(e) { alert('Export error: ' + e.message); }
 }
+// ═══════════════════════════════════════════════════════════
+// AGENT REVIEW
+// ═══════════════════════════════════════════════════════════
+function agrevInit() {
+  // Populate agent dropdown from _evals
+  const sel = document.getElementById('agrev-agent');
+  if (!sel) return;
+  const agents = [...new Set(_evals.map(e => e.agent_name).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">— Select agent —</option>' +
+    agents.map(a => `<option value="${a}">${a}</option>`).join('');
+
+  // Populate run filter
+  const runSel = document.getElementById('agrev-run');
+  if (runSel) {
+    fetch(API + '/runs/', {headers: {'Authorization': 'Bearer ' + _token}})
+      .then(r => r.json()).then(runs => {
+        runSel.innerHTML = '<option value="">All runs</option>' +
+          (runs || []).filter(r => r.status === 'done').map(r =>
+            `<option value="${r.id}">Run ${r.id.slice(0,8)} (${r.created_at?.slice(0,10)})</option>`
+          ).join('');
+      }).catch(() => {});
+  }
+}
+
+function agrevOnSelect() {
+  const name = document.getElementById('agrev-agent')?.value;
+  const statsEl = document.getElementById('agrev-stats');
+  const statsContent = document.getElementById('agrev-stats-content');
+  const btn = document.getElementById('agrev-btn');
+
+  if (!name) {
+    statsEl.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+
+  // Show quick stats from _evals
+  const agentEvals = _evals.filter(e => e.agent_name === name);
+  const avg = agentEvals.length
+    ? Math.round(agentEvals.reduce((s,e) => s + (e.total_score||0), 0) / agentEvals.length * 10) / 10
+    : 0;
+  const churn = agentEvals.filter(e => e.churn_risk_flag).length;
+  const csats = agentEvals.filter(e => e.csat).map(e => e.csat);
+  const avgCsat = csats.length ? (csats.reduce((a,b) => a+b, 0) / csats.length).toFixed(1) : 'N/A';
+
+  statsContent.innerHTML =
+    `<strong>${name}</strong> · ${agentEvals.length} tickets · ` +
+    `Avg QA: <strong style="color:${avg>=75?'var(--ok)':avg>=55?'var(--warn)':'var(--danger)'}">${avg}/100</strong> · ` +
+    `Churn flags: <strong style="color:var(--danger)">${churn}</strong> · CSAT avg: <strong>${avgCsat}</strong>`;
+
+  statsEl.style.display = 'block';
+  btn.disabled = agentEvals.length < 2;
+  if (agentEvals.length < 2) {
+    statsContent.innerHTML += ' <span style="color:var(--warn)">— Need at least 2 evaluated tickets</span>';
+  }
+
+  document.getElementById('agrev-result').style.display = 'none';
+}
+
+async function runAgentScorecard() {
+  const agentName = document.getElementById('agrev-agent')?.value;
+  const runId = document.getElementById('agrev-run')?.value || null;
+  if (!agentName) return;
+
+  const btn = document.getElementById('agrev-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="sp"></div> Analysing patterns with Claude Sonnet...';
+  document.getElementById('agrev-result').style.display = 'none';
+
+  try {
+    const r = await apiFetch('/agent-scorecard/', {
+      method: 'POST',
+      body: JSON.stringify({agent_name: agentName, run_id: runId || null})
+    });
+    if (!r) return;
+    if (r.detail) { alert('Error: ' + r.detail); return; }
+    renderAgentScorecard(r);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✦ Generate Agent Scorecard';
+  }
+}
+
+function renderAgentScorecard(d) {
+  const LABELS = {
+    consistency: 'Consistency',
+    product_knowledge: 'Product Knowledge',
+    communication_quality: 'Communication Quality',
+    tone_and_empathy: 'Tone & Empathy',
+    ownership: 'Ownership',
+    efficiency: 'Efficiency',
+    problem_solving: 'Problem-Solving Ability',
+    repeat_contact_prevention: 'Repeat Contact Prevention',
+    trust_building: 'Trust Building',
+    customer_care_maturity: 'Customer Care Maturity',
+  };
+  const LEVEL_COLOR = {High:'var(--ok)',Good:'var(--ok)',Mixed:'var(--warn)',Risk:'var(--danger)',Critical:'var(--danger)'};
+  const PRI_COLOR   = {Low:'var(--ok)',Medium:'var(--warn)',High:'var(--danger)'};
+  const scoreColor  = s => s>=4?'var(--ok)':s>=3?'var(--warn)':'var(--danger)';
+  const scoreBg     = s => s>=4?'rgba(52,211,153,.15)':s>=3?'rgba(251,191,36,.15)':'rgba(248,113,113,.15)';
+  const meta = d.agent_meta || {};
+
+  const rows = Object.entries(d.categories||{}).map(([key, v]) => `
+    <tr style="border-bottom:1px solid rgba(42,42,61,.3)">
+      <td style="padding:9px 12px;font-size:12px;white-space:nowrap">${LABELS[key]||key}</td>
+      <td style="padding:9px 12px;text-align:center">
+        <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
+      </td>
+      <td style="padding:9px 12px;font-size:12px;color:var(--dim);line-height:1.5">${v.pattern}</td>
+    </tr>`).join('');
+
+  const patterns  = (d.pattern_summary||[]).map(p=>`<li style="margin-bottom:5px;font-size:12px">${p}</li>`).join('');
+  const strengths = (d.strength_areas||[]).map(s=>`<li style="margin-bottom:5px;font-size:12px">${s}</li>`).join('');
+  const improv    = (d.improvement_areas||[]).map(s=>`<li style="margin-bottom:5px;font-size:12px">${s}</li>`).join('');
+
+  const innerHTML = `
+    <!-- Header -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:16px;font-weight:800;margin-bottom:3px">Agent QA Scorecard — ${meta.agent_name||''}</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:2px">${meta.group_name||''} · ${meta.ticket_count||0} tickets analysed · CSAT avg: ${meta.avg_csat||'N/A'}</div>
+        <div style="font-size:12px;color:var(--dim)">QA score avg: <strong>${meta.avg_qa_score||0}/100</strong> · Churn flags: <strong style="color:var(--danger)">${meta.churn_count||0}</strong> (${meta.churn_pct||0}%)</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:var(--disp);font-size:32px;font-weight:800;line-height:1;color:${scoreColor(d.average_score)}">${d.average_score}<span style="font-size:14px;color:var(--dim)">/5</span></div>
+        <span style="display:inline-block;margin-top:4px;padding:3px 12px;border-radius:10px;font-size:11px;font-weight:700;font-family:var(--mono);background:${scoreBg(d.average_score)};color:${LEVEL_COLOR[d.performance_level]||'var(--txt)'}">${d.performance_level}</span>
+        <span style="display:inline-block;margin-top:4px;margin-left:6px;padding:3px 12px;border-radius:10px;font-size:11px;font-weight:700;font-family:var(--mono);background:${scoreBg(d.average_score)};color:${PRI_COLOR[d.coaching_priority]||'var(--txt)'}">Coaching: ${d.coaching_priority}</span>
+      </div>
+    </div>
+
+    <!-- Score table -->
+    <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+          <th style="padding:8px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:200px">Category</th>
+          <th style="padding:8px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:80px">Score</th>
+          <th style="padding:8px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pattern Observed Across Tickets</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <!-- Pattern Summary -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📊 Pattern Summary</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">${patterns}</ul>
+    </div>
+
+    <!-- Strengths / Improvement -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div style="background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--ok);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✓ Strength Areas</div>
+        <ul style="margin:0;padding-left:16px;line-height:1.7">${strengths||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+      </div>
+      <div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--danger);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✕ Improvement Areas</div>
+        <ul style="margin:0;padding-left:16px;line-height:1.7">${improv||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+      </div>
+    </div>
+
+    <!-- Leadership Comment -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-left:3px solid var(--ac);border-radius:8px;padding:16px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Leadership Comment</div>
+      <p style="font-size:13px;line-height:1.8;margin:0">${d.leadership_comment}</p>
+    </div>`;
+
+  const el = document.getElementById('agrev-result');
+  el.innerHTML = innerHTML;
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 </script>
 </body>
 </html>
