@@ -17,10 +17,32 @@ from services.claude import eval_ticket
 logger = logging.getLogger("simployer.evaluator")
 
 
+def _dt(val) -> datetime | None:
+    """
+    Robustly parse any datetime value to a timezone-aware datetime object.
+    asyncpg requires datetime objects — never ISO strings.
+    """
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        # Ensure it is timezone-aware
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    try:
+        s = str(val).strip()
+        if not s:
+            return None
+        # Replace trailing Z with +00:00 for fromisoformat compatibility
+        s = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 async def evaluate_run(ctx: dict, run_id: str):
     """
-    Main arq background job.
-    ctx["redis"] is the arq Redis connection — used for pub/sub progress.
+    Main evaluation job — works as both an arq job and a FastAPI BackgroundTask.
+    ctx["redis"] is used for pub/sub progress (can be a no-op FakeRedis).
     """
     redis = ctx["redis"]
 
@@ -36,47 +58,40 @@ async def evaluate_run(ctx: dict, run_id: str):
         await db.commit()
 
         async def push(done: int, total: int, churn: int):
-            await redis.publish(f"run:{run_id}", json.dumps({
-                "run_id": run_id,
-                "done": done,
-                "total": total,
-                "churn": churn,
-                "pct": round(done / total * 100) if total else 0,
-                "status": "running",
-            }))
+            try:
+                await redis.publish(f"run:{run_id}", json.dumps({
+                    "run_id": run_id,
+                    "done": done,
+                    "total": total,
+                    "churn": churn,
+                    "pct": round(done / total * 100) if total else 0,
+                    "status": "running",
+                }))
+            except Exception:
+                pass  # Non-fatal — progress is also readable via DB poll
 
         try:
-            # ── Step 1: Fetch ticket metadata ────────────────────────
+            # ── Step 1: Fetch ticket metadata ──────────────────────────────
             logger.info(f"[run={run_id}] Fetching tickets (last {run.days_back} days)...")
             tickets = await fetch_all_tickets(run.days_back)
             run.tickets_total = len(tickets)
             await db.commit()
-            logger.info(f"[run={run_id}] {len(tickets)} tickets fetched")
+            logger.info(f"[run={run_id}] {len(tickets)} tickets to evaluate")
 
-            # ── Step 2: Fetch conversations + eval each ticket ────────
+            # ── Step 2: Fetch conversations + evaluate each ticket ──────────
             for i, ticket in enumerate(tickets):
                 ticket_id = str(ticket["id"])
                 try:
-                    # Fetch conversations
                     convs = await fetch_conversations(ticket_id)
                     thread = build_thread(ticket, convs)
                     churn_kw = detect_churn(thread)
-                    frt = frt_minutes(ticket)
 
-                    # Upsert ticket
-                    def _parse_dt(val):
-                        """Parse ISO datetime string to datetime object."""
-                        if not val:
-                            return None
-                        if hasattr(val, 'year'):
-                            return val
-                        from datetime import datetime, timezone
-                        try:
-                            s = str(val).replace("Z", "+00:00")
-                            return datetime.fromisoformat(s)
-                        except Exception:
-                            return None
+                    # Parse all datetimes ONCE per ticket — never pass strings to asyncpg
+                    created_at  = _dt(ticket.get("created_at"))
+                    updated_at  = _dt(ticket.get("updated_at"))
+                    resolved_at = _dt((ticket.get("stats") or {}).get("resolved_at"))
 
+                    # Upsert ticket — all datetime columns are proper objects
                     stmt = pg_insert(Ticket).values(
                         id=ticket_id,
                         user_id=user_id,
@@ -89,20 +104,20 @@ async def evaluate_run(ctx: dict, run_id: str):
                         tags=ticket.get("tags") or [],
                         fr_escalated=bool(ticket.get("fr_escalated")),
                         nr_escalated=bool(ticket.get("nr_escalated")),
-                        created_at=_parse_dt(ticket.get("created_at")),
-                        resolved_at=_parse_dt((ticket.get("stats") or {}).get("resolved_at")),
-                        updated_at=_parse_dt(ticket.get("updated_at")),
+                        created_at=created_at,
+                        resolved_at=resolved_at,
+                        updated_at=updated_at,
                     ).on_conflict_do_update(
                         index_elements=["id", "user_id"],
                         set_={
-                            "subject": ticket.get("subject"),
+                            "subject":    ticket.get("subject"),
                             "agent_name": (ticket.get("responder") or {}).get("name"),
-                            "updated_at": ticket.get("updated_at"),
+                            "updated_at": updated_at,   # datetime object, not string
                         }
                     )
                     await db.execute(stmt)
 
-                    # Delete old messages and re-insert
+                    # Delete old messages and re-insert fresh ones
                     await db.execute(
                         delete(Message).where(
                             Message.ticket_id == ticket_id,
@@ -114,13 +129,13 @@ async def evaluate_run(ctx: dict, run_id: str):
                             ticket_id=ticket_id,
                             user_id=user_id,
                             role=msg["role"],
-                            ts=_parse_dt(msg["ts"]),
+                            ts=_dt(msg["ts"]),  # datetime object
                             body=msg["body"],
                         ))
                     await db.commit()
 
-                    # Claude evaluation
-                    await asyncio.sleep(0.3)  # small delay before Claude call
+                    # ── Claude evaluation ──────────────────────────────────
+                    await asyncio.sleep(0.3)
                     ev = await eval_ticket(ticket, thread)
 
                     # Upsert evaluation
@@ -140,11 +155,11 @@ async def evaluate_run(ctx: dict, run_id: str):
                         sentiment_start=(ev.get("sentiment") or {}).get("start"),
                         sentiment_end=(ev.get("sentiment") or {}).get("end"),
                         summary=ev.get("summary"),
-                        churn_risk_flag=ev.get("churn_risk_flag", False),
+                        churn_risk_flag=bool(ev.get("churn_risk_flag") or churn_kw),
                         churn_risk_reason=ev.get("churn_risk_reason") or (
                             f'Signal: "{churn_kw}"' if churn_kw else None
                         ),
-                        contact_problem_flag=ev.get("contact_problem_flag", False),
+                        contact_problem_flag=bool(ev.get("contact_problem_flag")),
                         coaching_tip=ev.get("coaching_tip"),
                         strengths=ev.get("strengths"),
                         improvements=ev.get("improvements"),
@@ -157,7 +172,7 @@ async def evaluate_run(ctx: dict, run_id: str):
                     await db.commit()
 
                     logger.info(
-                        f"[run={run_id}] [{i + 1}/{len(tickets)}] "
+                        f"[run={run_id}] [{i+1}/{len(tickets)}] "
                         f"#{ticket_id} score={ev.get('total_score')} "
                         f"churn={ev.get('churn_risk_flag')}"
                     )
@@ -169,20 +184,17 @@ async def evaluate_run(ctx: dict, run_id: str):
                     await db.commit()
                     continue
 
-                await asyncio.sleep(2)  # Claude rate limit breathing room
+                await asyncio.sleep(2)  # Rate limit breathing room
 
+            # ── Done ────────────────────────────────────────────────────────
             run.status = "done"
             run.finished_at = datetime.now(timezone.utc)
             await db.commit()
 
-            # Final broadcast
             await redis.publish(f"run:{run_id}", json.dumps({
-                "run_id": run_id,
-                "status": "done",
-                "done": run.tickets_done,
-                "total": run.tickets_total,
-                "churn": run.churn_count,
-                "pct": 100,
+                "run_id": run_id, "status": "done",
+                "done": run.tickets_done, "total": run.tickets_total,
+                "churn": run.churn_count, "pct": 100,
             }))
             logger.info(
                 f"[run={run_id}] DONE — {run.tickets_done}/{run.tickets_total} tickets, "
@@ -194,8 +206,11 @@ async def evaluate_run(ctx: dict, run_id: str):
             run.error = str(e)
             run.finished_at = datetime.now(timezone.utc)
             await db.commit()
-            await redis.publish(f"run:{run_id}", json.dumps({
-                "run_id": run_id, "status": "failed", "error": str(e)
-            }))
+            try:
+                await redis.publish(f"run:{run_id}", json.dumps({
+                    "run_id": run_id, "status": "failed", "error": str(e)
+                }))
+            except Exception:
+                pass
             logger.error(f"[run={run_id}] FATAL: {e}")
             raise
