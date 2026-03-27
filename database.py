@@ -2,17 +2,34 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from config import settings
 
-engine = create_async_engine(settings.database_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+engine = create_async_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+)
 
-class Base(DeclarativeBase): pass
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
-        try: yield session
-        finally: await session.close()
+        try:
+            yield session
+        finally:
+            await session.close()
+
 
 async def init_db():
+    """Create all tables (dev only — use Alembic in production)."""
     from models import Base as ModelBase
     async with engine.begin() as conn:
         await conn.run_sync(ModelBase.metadata.create_all)

@@ -47,6 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Request logging ───────────────────────────────────────────────────────────
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     t0 = time.time()
@@ -56,6 +57,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router,    prefix="/auth",    tags=["auth"])
 app.include_router(runs.router,    prefix="/runs",    tags=["runs"])
 app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
@@ -63,22 +65,30 @@ app.include_router(agents.router,  prefix="/agents",  tags=["agents"])
 app.include_router(export.router,  prefix="/export",  tags=["export"])
 
 
+# ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["ops"])
 async def health():
     return {"status": "ok", "environment": settings.environment}
 
 
+# ── WebSocket: live run progress ──────────────────────────────────────────────
 @app.websocket("/ws/runs/{run_id}")
 async def run_progress(ws: WebSocket, run_id: str):
+    """
+    Subscribe to Redis pub/sub channel for a specific run.
+    Forwards progress events to the browser as JSON.
+    """
     await ws.accept()
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     pubsub = r.pubsub()
     await pubsub.subscribe(f"run:{run_id}")
+
     try:
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message and message.get("type") == "message":
                 await ws.send_text(message["data"])
+                # Close WebSocket when run finishes
                 try:
                     data = json.loads(message["data"])
                     if data.get("status") in ("done", "failed"):
@@ -93,8 +103,10 @@ async def run_progress(ws: WebSocket, run_id: str):
         await r.close()
 
 
+# ── Serve frontend ────────────────────────────────────────────────────────────
 try:
     app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")
+
     @app.get("/")
     async def root():
         return FileResponse("frontend/index.html")

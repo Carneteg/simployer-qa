@@ -17,9 +17,9 @@ logging.basicConfig(
 class WorkerSettings:
     functions      = [evaluate_run]
     redis_settings = settings.redis_settings
-    max_jobs       = 4
-    job_timeout    = 7200
-    keep_result    = 3600
+    max_jobs       = 4       # 4 concurrent runs across all users
+    job_timeout    = 7200    # 2-hour hard limit per run
+    keep_result    = 3600    # keep result in Redis 1h
 
 
 if __name__ == "__main__":

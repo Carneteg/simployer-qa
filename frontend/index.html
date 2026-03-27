@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Simployer QA Cloud</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0f;--s1:#13131a;--s2:#1c1c28;--bdr:#2a2a3d;--ac:#5b6af0;--ac2:#a78bfa;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--txt:#e8e8f0;--dim:#6b6b8a;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;--disp:'Syne',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;line-height:1.6;min-height:100vh}
+/* Login screen */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-card{background:var(--s1);border:1px solid var(--bdr);border-radius:16px;padding:40px;width:360px}
+.login-logo{font-family:var(--disp);font-size:22px;font-weight:800;margin-bottom:6px}.login-logo span{color:var(--ac)}
+.login-sub{font-size:13px;color:var(--dim);margin-bottom:28px}
+.lf{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.lf label{font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.lf input{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 13px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .2s}
+.lf input:focus{border-color:var(--ac)}
+.login-err{font-size:12px;color:var(--danger);margin-bottom:12px;min-height:18px}
+/* App */
+.app-wrap{display:none;max-width:1100px;margin:0 auto;padding:0 24px}
+header{padding:20px 0 14px;border-bottom:1px solid var(--bdr);margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.logo{font-family:var(--disp);font-size:19px;font-weight:800}.logo span{color:var(--ac)}
+.hdr-right{display:flex;gap:10px;align-items:center}
+.user-pill{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--s2);border:1px solid var(--bdr);border-radius:20px;padding:3px 12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bdr);margin-bottom:20px;flex-wrap:wrap}
+.tab{padding:9px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;text-transform:uppercase;letter-spacing:.5px}
+.tab.active{color:var(--ac2);border-bottom-color:var(--ac)}
+.tab-content{display:none}.tab-content.active{display:block}
+.panel,.card{background:var(--s1);border:1px solid var(--bdr);border-radius:12px;padding:18px 22px;margin-bottom:16px}
+.panel h3,.card h3{font-family:var(--disp);font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bdr)}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:10px;font-family:var(--mono);color:var(--dim);letter-spacing:.5px;text-transform:uppercase}
+.f input,.f select{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:8px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%;transition:border-color .2s}
+.f input:focus,.f select:focus{border-color:var(--ac)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:10px;padding:11px 22px;font-family:var(--disp);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-primary{background:var(--ac);color:#fff;width:100%;margin-top:4px}
+.btn-primary:hover:not(:disabled){background:#4a59e0}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:var(--s2);border:1px solid var(--ac);color:var(--ac2)}
+.btn-outline:hover{background:rgba(91,106,240,.2)}
+.btn-sm{padding:6px 14px;font-size:12px;border-radius:7px}
+.sg{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+.st{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:14px}
+.stl{font-size:10px;font-family:var(--mono);color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+.stv{font-family:var(--disp);font-size:26px;font-weight:800;line-height:1}
+.vd{color:var(--danger)}.vw{color:var(--warn)}.vo{color:var(--ok)}.va{color:var(--ac2)}
+.bw{background:var(--bg);border-radius:100px;height:5px;overflow:hidden;margin-bottom:8px}
+.bf{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--ac),var(--ac2));transition:width .4s;width:0%}
+.lg{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:12px;height:180px;overflow-y:auto;font-family:var(--mono);font-size:11px;margin-top:10px}
+.ll{padding:2px 0;line-height:1.5}.ll::before{content:'> ';color:var(--ac)}
+.ll.ok{color:var(--ok)}.ll.err{color:var(--danger)}.ll.warn{color:var(--warn)}.ll.info{color:var(--txt)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);padding:7px 9px;text-align:left;border-bottom:1px solid var(--bdr);white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(42,42,61,.4);cursor:pointer;transition:background .15s}
+tbody tr:hover{background:var(--s2)}
+tbody td{padding:7px 9px;vertical-align:top}
+.tag{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-family:var(--mono)}
+.tL{background:rgba(52,211,153,.15);color:var(--ok)}.tM{background:rgba(107,107,138,.2);color:var(--dim)}.tH{background:rgba(251,191,36,.15);color:var(--warn)}.tC{background:rgba(248,113,113,.2);color:var(--danger)}
+.pr{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.pn{font-size:12px;width:120px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbw{flex:1;background:var(--bg);border-radius:100px;height:4px}
+.pbf{height:100%;border-radius:100px}
+.pbf.g{background:var(--ok)}.pbf.w{background:var(--warn)}.pbf.b{background:var(--danger)}
+.pc{font-family:var(--mono);font-size:10px;color:var(--dim);width:36px;text-align:right;flex-shrink:0}
+.tc{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.pg{display:flex;align-items:center;gap:9px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.pgb{background:var(--s2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:var(--mono);font-size:10px}
+.pgb:disabled{opacity:.3}
+.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.mov.open{display:flex}
+.mo{background:var(--s1);border:1px solid var(--bdr);border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:80vh;overflow-y:auto;position:relative}
+.mx{position:absolute;top:12px;right:12px;background:var(--s2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px}
+.sp{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.run-hist{display:flex;flex-direction:column;gap:8px}
+.run-row{background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.run-status{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:10px}
+.rs-done{background:rgba(52,211,153,.15);color:var(--ok)}
+.rs-running{background:rgba(91,106,240,.15);color:var(--ac2)}
+.rs-queued{background:rgba(107,107,138,.2);color:var(--dim)}
+.rs-failed{background:rgba(248,113,113,.15);color:var(--danger)}
+@media(max-width:700px){.sg,.fr,.tc{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Simployer <span>QA</span> <span style="font-size:11px;color:var(--dim);font-family:var(--mono)">Cloud</span></div>
+    <div class="login-sub">Sign in to your organisation</div>
+    <div class="lf"><label>Email</label><input id="l-email" type="email" placeholder="you@simployer.com" autocomplete="email"/></div>
+    <div class="lf"><label>Password</label><input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+    <div class="login-err" id="login-err"></div>
+    <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Sign In</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app-wrap" id="app-screen">
+<header>
+  <div class="logo">Simployer <span>QA</span> <span style="font-size:11px;color:var(--dim);font-family:var(--mono)">Cloud</span></div>
+  <div class="hdr-right">
+    <div class="user-pill" id="user-pill">—</div>
+    <button class="btn btn-outline btn-sm" onclick="doExport('xlsx')">⬇ Export</button>
+    <button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="logout()">Sign Out</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('ov')">Overview</div>
+  <div class="tab" onclick="showTab('tix')">Tickets</div>
+  <div class="tab" onclick="showTab('ag')">Agents</div>
+  <div class="tab" onclick="showTab('ch')">Churn Risk</div>
+  <div class="tab" onclick="showTab('runs')">Runs</div>
+  <div class="tab" onclick="showTab('exp')">Export</div>
+</div>
+
+<!-- OVERVIEW -->
+<div class="tab-content active" id="tab-ov">
+  <div class="sg">
+    <div class="st"><div class="stl">Evaluated</div><div class="stv va" id="s0">—</div></div>
+    <div class="st"><div class="stl">Avg Score</div><div class="stv" id="s1">—</div></div>
+    <div class="st"><div class="stl">Churn Risk</div><div class="stv vd" id="s2">—</div></div>
+    <div class="st"><div class="stl">ARR at Risk</div><div class="stv vw" id="s3">—</div></div>
+    <div class="st"><div class="stl">Contact Probs</div><div class="stv vw" id="s4">—</div></div>
+  </div>
+  <div class="tc">
+    <div class="card"><h3>Category Averages</h3><div id="cat-bars"></div></div>
+    <div class="card"><h3>Top Failure Areas</h3><div id="fail-bars"></div></div>
+  </div>
+  <div class="card"><h3>Summary</h3><div id="ov-summary" style="font-size:14px;line-height:1.8">Run analysis to see results.</div></div>
+</div>
+
+<!-- TICKETS -->
+<div class="tab-content" id="tab-tix">
+  <div class="card"><h3>Evaluated Tickets <span id="tix-count" style="color:var(--dim);font-family:var(--mono);font-size:10px"></span></h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>ID</th><th>Agent</th><th>Group</th><th>Score</th><th>Churn</th><th>Contact</th><th>CSAT</th><th>Coaching Tip</th></tr></thead>
+      <tbody id="tbl-body"></tbody>
+    </table></div>
+    <div class="pg" id="tbl-pg"></div>
+  </div>
+</div>
+
+<!-- AGENTS -->
+<div class="tab-content" id="tab-ag">
+  <div class="tc"><div id="ag-list"></div><div id="ag-detail"><div class="card"><h3>Select an agent</h3><p style="color:var(--dim)">Click a card to view scorecard.</p></div></div></div>
+</div>
+
+<!-- CHURN -->
+<div class="tab-content" id="tab-ch">
+  <div class="card"><h3>🚨 Churn Risk Tickets</h3><div id="ch-list"></div></div>
+</div>
+
+<!-- RUNS -->
+<div class="tab-content" id="tab-runs">
+  <div class="panel"><h3>New Analysis Run</h3>
+    <div class="fr">
+      <div class="f"><label>Analysis Range</label>
+        <select id="r-days">
+          <option value="1">Today — last 24h</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="90">Quarterly</option>
+          <option value="180">Last 6 months</option>
+          <option value="365">Full year</option>
+        </select>
+      </div>
+      <div class="f" style="justify-content:flex-end">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" style="margin:0" onclick="startRun()" id="run-btn">▶ Start Analysis</button>
+      </div>
+    </div>
+    <!-- Live progress (shown when a run is active) -->
+    <div id="run-progress" style="display:none">
+      <div class="bw" style="margin-top:12px"><div class="bf" id="r-bar"></div></div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px" id="r-txt"></div>
+      <div class="lg" id="r-log"></div>
+    </div>
+  </div>
+  <div class="panel"><h3>Run History</h3>
+    <div class="run-hist" id="run-hist">Loading...</div>
+  </div>
+</div>
+
+<!-- EXPORT -->
+<div class="tab-content" id="tab-exp">
+  <div class="panel"><h3>Export Data</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.7">
+      All data is stored server-side. Exports are generated fresh from the database and include full conversation threads, QA scores, and agent summaries.
+    </p>
+    <div class="fr">
+      <div class="f"><label>Run</label>
+        <select id="exp-run"><option value="">All runs (latest evaluations)</option></select>
+      </div>
+      <div class="f"><label>Format</label>
+        <select id="exp-fmt">
+          <option value="xlsx">Excel (.xlsx) — 5 sheets</option>
+          <option value="json">JSON — full objects</option>
+          <option value="csv">CSV — flat file</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-primary" style="width:auto" onclick="doExport(document.getElementById('exp-fmt').value)">⬇ Download Export</button>
+      <button class="btn btn-outline" onclick="doExport('xlsx',true)">🔄 Churn Risk Only</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL -->
+<div class="mov" id="modal"><div class="mo">
+  <button class="mx" onclick="closeModal()">✕</button>
+  <div id="modal-body"></div>
+</div></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const API = window.location.origin;   // same origin as the FastAPI server
+const CATS = {
+  clarity_structure:'Clarity', tone_professionalism:'Tone', empathy:'Empathy',
+  accuracy:'Accuracy', resolution_quality:'Resolution', efficiency:'Efficiency',
+  ownership:'Ownership', commercial_awareness:'Commercial',
+};
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
+let _token = sessionStorage.getItem('qa_token');
+let _user  = null;
+let _evals = [];
+let _curPage = 1;
+const PS = 50;
+
+async function apiFetch(path, opts = {}) {
+  const r = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(_token ? { 'Authorization': `Bearer ${_token}` } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  if (r.status === 401) { logout(); return null; }
+  if (!r.ok) { const t = await r.text(); throw new Error(t); }
+  if (r.headers.get('content-type')?.includes('json')) return r.json();
+  return r; // for binary responses
+}
+
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  const btn   = document.getElementById('login-btn');
+  const err   = document.getElementById('login-err');
+  err.textContent = '';
+  btn.disabled = true; btn.innerHTML = '<div class="sp"></div> Signing in...';
+  try {
+    const body = new URLSearchParams({ username: email, password: pass });
+    const r = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!r.ok) { err.textContent = 'Invalid email or password'; return; }
+    const data = await r.json();
+    _token = data.access_token;
+    sessionStorage.setItem('qa_token', _token);
+    await initApp();
+  } catch(e) {
+    err.textContent = 'Connection error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function logout() {
+  sessionStorage.removeItem('qa_token');
+  _token = null; _user = null; _evals = [];
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+async function initApp() {
+  try {
+    _user = await apiFetch('/auth/me');
+    if (!_user) return;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    document.getElementById('user-pill').textContent = _user.email;
+    await loadEvals();
+    await loadRunHistory();
+  } catch(e) {
+    document.getElementById('login-err').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function loadEvals() {
+  try {
+    _evals = await apiFetch('/tickets?limit=1000') || [];
+    renderAll();
+  } catch(e) { console.error(e); }
+}
+
+// Auto-init if token exists
+if (_token) initApp();
+
+// ═══════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════
+function showTab(id) {
+  document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
+  const idx = ['ov','tix','ag','ch','runs','exp'].indexOf(id);
+  document.querySelectorAll('.tab')[idx]?.classList.add('active');
+  document.getElementById('tab-'+id)?.classList.add('active');
+  if (id === 'runs') loadRunHistory();
+  if (id === 'exp')  loadRunsForExport();
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', function(e) { if(e.target===this)closeModal(); });
+
+// ═══════════════════════════════════════════════════════════
+// RUNS
+// ═══════════════════════════════════════════════════════════
+let _wsConn = null;
+
+async function startRun() {
+  const days = parseInt(document.getElementById('r-days').value);
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.innerHTML = '<div class="sp"></div> Starting...';
+  document.getElementById('run-progress').style.display = 'block';
+  document.getElementById('r-log').innerHTML = '';
+
+  try {
+    const data = await apiFetch('/runs/', {
+      method: 'POST',
+      body: JSON.stringify({ days_back: days }),
+    });
+    rlog('Run started — ID: ' + data.run_id);
+    openRunSocket(data.run_id);
+    await loadRunHistory();
+  } catch(e) {
+    rlog('Error: ' + e.message, 'err');
+    btn.disabled = false; btn.textContent = '▶ Start Analysis';
+  }
+}
+
+function openRunSocket(runId) {
+  const wsUrl = `${API.replace('http','ws')}/ws/runs/${runId}`;
+  if (_wsConn) _wsConn.close();
+  _wsConn = new WebSocket(wsUrl);
+
+  _wsConn.onmessage = async (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      document.getElementById('r-bar').style.width = (d.pct || 0) + '%';
+      document.getElementById('r-txt').textContent =
+        `${d.done || 0}/${d.total || 0} tickets · ${d.churn || 0} churn · ${d.pct || 0}%`;
+
+      if (d.status === 'done') {
+        rlog('✅ Complete — ' + d.done + ' tickets evaluated, ' + d.churn + ' churn flags', 'ok');
+        await loadEvals();
+        await loadRunHistory();
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-btn').textContent = '▶ Run Again';
+        showTab('ov');
+      } else if (d.status === 'failed') {
+        rlog('❌ Failed: ' + d.error, 'err');
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-btn').textContent = '▶ Retry';
+      } else {
+        rlog(`[${d.done}/${d.total}] Evaluating...`);
+      }
+    } catch(err) { console.error(err); }
+  };
+
+  _wsConn.onerror = () => rlog('WebSocket error — check connection', 'warn');
+}
+
+function rlog(m, t='dim') {
+  const b = document.getElementById('r-log');
+  const d = document.createElement('div');
+  d.className = 'll ' + t; d.textContent = m;
+  b.appendChild(d); b.scrollTop = b.scrollHeight;
+}
+
+async function loadRunHistory() {
+  try {
+    const runs = await apiFetch('/runs/') || [];
+    const hist = document.getElementById('run-hist');
+    if (!runs.length) { hist.innerHTML = '<div style="color:var(--dim);font-size:13px">No runs yet.</div>'; return; }
+    hist.innerHTML = runs.map(r => `
+      <div class="run-row">
+        <div>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ac)">
+            ${r.id.slice(0,8)}...
+          </span>
+          <span style="font-size:12px;color:var(--dim);margin-left:8px">
+            Last ${r.days_back} days · ${r.tickets_done}/${r.tickets_total} tickets · ${r.churn_count} churn
+          </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">
+            ${(r.created_at||'').slice(0,16).replace('T',' ')}
+          </span>
+          <span class="run-status rs-${r.status}">${r.status}</span>
+          ${r.status === 'done' ? `<button class="btn btn-outline btn-sm" onclick="loadRunEvals('${r.id}')">Load</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function loadRunEvals(runId) {
+  _evals = await apiFetch(`/tickets?run_id=${runId}&limit=1000`) || [];
+  renderAll();
+  showTab('ov');
+}
+
+async function loadRunsForExport() {
+  const sel = document.getElementById('exp-run');
+  const runs = await apiFetch('/runs/') || [];
+  sel.innerHTML = '<option value="">All runs (latest evaluations)</option>' +
+    runs.filter(r => r.status === 'done').map(r =>
+      `<option value="${r.id}">Run ${r.id.slice(0,8)} — ${r.tickets_done} tickets (${r.created_at?.slice(0,10)})</option>`
+    ).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); }
+
+function getCat(ev, cat) {
+  const s = ev.scores || {};
+  const aliases = { clarity:['clarity','clarity_structure'], tone:['tone','tone_professionalism'] };
+  const keys = aliases[cat] || [cat];
+  for (const k of keys) { const v=s[k]; if (v?.score!=null) return v.score; }
+  return null;
+}
+
+function renderOv() {
+  const n = _evals.length; if (!n) return;
+  const avg = Math.round(_evals.reduce((s,e)=>s+(e.total_score||0),0)/n*10)/10;
+  const chN = _evals.filter(e=>e.churn_risk_flag).length;
+  const coN = _evals.filter(e=>e.contact_problem_flag).length;
+  document.getElementById('s0').textContent = n;
+  document.getElementById('s1').textContent = avg;
+  document.getElementById('s1').className = 'stv ' + (avg>=75?'vo':avg>=55?'vw':'vd');
+  document.getElementById('s2').textContent = chN;
+  document.getElementById('s3').textContent = '—';
+  document.getElementById('s4').textContent = coN;
+
+  const catA = {};
+  for (const cat of Object.keys(CATS)) {
+    const vals = _evals.map(e=>getCat(e,cat)).filter(v=>v!=null);
+    catA[cat] = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10 : null;
+  }
+  document.getElementById('cat-bars').innerHTML = Object.entries(catA)
+    .filter(([,v])=>v!=null).sort((a,b)=>b[1]-a[1])
+    .map(([cat,v])=>`<div class="pr"><span class="pn">${CATS[cat]}</span><div class="pbw"><div class="pbf ${v>=4?'g':v>=3?'w':'b'}" style="width:${v/5*100}%"></div></div><span class="pc">${v}/5</span></div>`)
+    .join('');
+
+  const sorted = Object.entries(catA).filter(([,v])=>v!=null).sort((a,b)=>a[1]-b[1]).slice(0,4);
+  document.getElementById('fail-bars').innerHTML = sorted
+    .map(([cat,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--bdr)"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px">${CATS[cat]}</span><span class="tag ${v>=4?'tL':v>=3?'tH':'tC'}">${v}/5</span></div><div class="bw" style="margin:0"><div class="bf" style="width:${v/5*100}%;background:${v>=4?'var(--ok)':v>=3?'var(--warn)':'var(--danger)'}"></div></div></div>`)
+    .join('');
+
+  document.getElementById('ov-summary').innerHTML =
+    `<strong>${n}</strong> tickets evaluated. Average QA: <strong style="color:var(--ac2)">${avg}/100</strong>. ` +
+    `Churn risk: <strong style="color:var(--danger)">${chN}</strong>. ` +
+    `Weakest: <strong>${sorted.slice(0,2).map(([c])=>CATS[c]).join(', ')}</strong>.`;
+}
+
+function renderTix() {
+  const s = (_curPage-1)*PS;
+  document.getElementById('tix-count').textContent = '(' + _evals.length + ' total)';
+  document.getElementById('tbl-body').innerHTML = _evals.slice(s, s+PS).map(e =>
+    `<tr onclick="showTicket('${e.ticket_id}')">
+      <td style="font-family:var(--mono);color:var(--ac);font-size:10px">#${e.ticket_id}</td>
+      <td>${e.agent_name||'—'}</td>
+      <td style="color:var(--dim);font-size:11px">${e.group_name||'—'}</td>
+      <td><span class="tag ${e.total_score>=75?'tL':e.total_score>=55?'tH':'tC'}">${e.total_score}</span></td>
+      <td>${e.churn_risk_flag?'🚨':'—'}</td>
+      <td>${e.contact_problem_flag?'⚠️':'—'}</td>
+      <td style="font-family:var(--mono);font-size:10px">${e.csat||'—'}</td>
+      <td style="font-size:11px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.coaching_tip||''}</td>
+    </tr>`
+  ).join('');
+  const tp = Math.ceil(_evals.length/PS);
+  document.getElementById('tbl-pg').innerHTML =
+    `<button class="pgb" onclick="goPage(${_curPage-1})" ${_curPage<=1?'disabled':''}>← Prev</button>
+     Page ${_curPage}/${Math.max(tp,1)}
+     <button class="pgb" onclick="goPage(${_curPage+1})" ${_curPage>=tp?'disabled':''}>Next →</button>`;
+}
+function goPage(p) { _curPage = p; renderTix(); }
+
+function renderAg() {
+  const m = {};
+  for (const e of _evals) {
+    const k = e.agent_name||'Unknown';
+    if (!m[k]) m[k] = { name:k, group:e.group_name||'', ev:[], ch:0 };
+    m[k].ev.push(e); if(e.churn_risk_flag) m[k].ch++;
+  }
+  document.getElementById('ag-list').innerHTML = Object.values(m)
+    .sort((a,b) => { const as=a.ev.reduce((s,e)=>s+e.total_score,0)/a.ev.length, bs=b.ev.reduce((s,e)=>s+e.total_score,0)/b.ev.length; return as-bs; })
+    .map(a => {
+      const avg = Math.round(a.ev.reduce((s,e)=>s+e.total_score,0)/a.ev.length);
+      return `<div class="card" style="cursor:pointer;margin-bottom:12px" onclick="showAgent('${a.name.replace(/'/g,"\\'")}')">
+        <div style="font-family:var(--disp);font-size:14px;font-weight:700;margin-bottom:3px">${a.name}</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">${a.group} · ${a.ev.length} tickets · Score ${avg}/100 · Churn: ${a.ch}</div>
+        <div class="bw" style="margin-top:8px"><div class="bf" style="width:${avg}%;background:${avg>=75?'var(--ok)':avg>=55?'var(--warn)':'var(--danger)'}"></div></div>
+      </div>`;
+    }).join('');
+}
+
+async function showAgent(name) {
+  try {
+    const data = await apiFetch('/agents/' + encodeURIComponent(name));
+    if (!data) return;
+    document.getElementById('ag-detail').innerHTML = `
+      <div class="card">
+        <h3>${data.agent_name}</h3>
+        <div style="font-family:var(--disp);font-size:28px;font-weight:800;margin-bottom:8px;color:${data.avg_score>=75?'var(--ok)':data.avg_score>=55?'var(--warn)':'var(--danger)'}">${data.avg_score}/100</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:14px">${data.ticket_count} tickets · ${data.churn_count} churn flags · ${data.tier}</div>
+        ${Object.entries(data.cat_averages||{}).filter(([,v])=>v!=null).map(([cat,v])=>
+          `<div class="pr"><span class="pn">${CATS[cat]||cat}</span><div class="pbw"><div class="pbf ${v>=4?'g':v>=3?'w':'b'}" style="width:${v/5*100}%"></div></div><span class="pc">${v}/5</span></div>`
+        ).join('')}
+        <div style="margin-top:14px">${(data.tickets||[]).slice(0,5).map(t=>
+          `<div style="padding:5px 0;border-bottom:1px solid var(--bdr);font-size:12px;cursor:pointer" onclick="showTicket('${t.ticket_id}')">
+            #${t.ticket_id} · ${t.total_score}/100 ${t.churn_risk_flag?'🚨':''}<br>
+            <span style="font-size:11px;color:var(--dim)">${(t.subject||'').slice(0,60)}</span>
+          </div>`
+        ).join('')}</div>
+      </div>`;
+  } catch(e) { console.error(e); }
+}
+
+function renderCh() {
+  const ch = _evals.filter(e => e.churn_risk_flag);
+  document.getElementById('ch-list').innerHTML = ch.length
+    ? ch.map(e => `
+        <div style="padding:11px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;margin-bottom:10px;cursor:pointer" onclick="showTicket('${e.ticket_id}')">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+            <strong style="font-size:12px">#${e.ticket_id} — ${e.agent_name||'?'} (${e.group_name||''})</strong>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--danger)">${e.total_score}</span>
+          </div>
+          <div style="font-size:12px;color:var(--dim)">${e.churn_risk_reason||''}</div>
+          <div style="font-size:11px;color:var(--warn);margin-top:3px">→ ${e.coaching_tip||''}</div>
+        </div>`
+    ).join('')
+    : '<p style="color:var(--dim)">No churn risk detected.</p>';
+}
+
+async function showTicket(tid) {
+  const e = _evals.find(x => String(x.ticket_id) === String(tid));
+  if (!e) return;
+
+  // Load conversation from API
+  let msgs = [];
+  try { msgs = await apiFetch(`/tickets/${tid}/messages`) || []; } catch(_) {}
+
+  const cats = Object.keys(CATS);
+  const cRows = cats.map(cat => {
+    const s = e.scores?.[cat] || e.scores?.[cat+'_structure'] || e.scores?.[cat+'_professionalism'];
+    if (!s?.score && s?.score !== 0) return '';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <span style="width:120px;font-size:12px;flex-shrink:0">${CATS[cat]}</span>
+      <div class="pbw" style="flex:1"><div class="pbf ${s.score>=4?'g':s.score>=3?'w':'b'}" style="width:${s.score/5*100}%"></div></div>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--dim);width:28px">${s.score}/5</span>
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin-left:128px;font-style:italic">${(s.reason||'').slice(0,100)}</div>`;
+  }).join('');
+
+  const thread = msgs.length
+    ? `<div style="margin-top:14px">
+        <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Conversation (${msgs.length} messages)</strong>
+        <div style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:12px">
+          ${msgs.map(m=>
+            `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--bdr)">
+              <div style="font-family:var(--mono);font-size:10px;color:${m.role==='AGENT'?'var(--ac2)':'var(--ok)'};margin-bottom:3px">
+                ${m.role} · ${m.ts||''}
+              </div>
+              <div style="font-size:12px;line-height:1.6;white-space:pre-wrap">${(m.body||'').slice(0,800)}</div>
+            </div>`
+          ).join('')}
+        </div>
+      </div>`
+    : '';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div style="font-family:var(--disp);font-size:18px;font-weight:800;margin-bottom:4px">#${tid}</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:12px">${e.agent_name||''} · ${e.group_name||''} · <strong style="color:var(--ac2)">${e.total_score}/100</strong></div>
+    ${e.churn_risk_flag?`<div style="padding:9px 13px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;color:var(--danger);font-size:12px;margin-bottom:10px">🚨 ${e.churn_risk_reason}</div>`:''}
+    <div style="margin-bottom:10px">
+      <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Summary</strong>
+      <p style="margin-top:5px;font-size:13px;line-height:1.7">${e.summary||''}</p>
+    </div>
+    <div style="margin-bottom:10px"><strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Scores</strong>${cRows}</div>
+    <div style="margin-bottom:10px">
+      <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Improvements</strong>
+      <ul style="margin-top:5px;padding-left:16px">${(e.improvements||[]).map(i=>`<li style="font-size:12px;margin-bottom:3px">${i}</li>`).join('')}</ul>
+    </div>
+    <div style="margin-bottom:10px">
+      <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Coaching Tip</strong>
+      <div style="margin-top:5px;padding:9px 13px;background:var(--bg);border-left:3px solid var(--ac);border-radius:4px;font-size:13px;line-height:1.7">${e.coaching_tip||''}</div>
+    </div>
+    ${thread}`;
+  document.getElementById('modal').classList.add('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT — direct download via API
+// ═══════════════════════════════════════════════════════════
+async function doExport(fmt, churnOnly = false) {
+  const runId = document.getElementById('exp-run')?.value || '';
+  let url = `/export/${fmt}`;
+  const params = [];
+  if (runId) params.push('run_id=' + runId);
+  if (churnOnly) params.push('churn_only=true');
+  if (params.length) url += '?' + params.join('&');
+
+  try {
+    const r = await fetch(`${API}${url}`, {
+      headers: { 'Authorization': `Bearer ${_token}` }
+    });
+    if (!r.ok) { alert('Export failed: ' + await r.text()); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    const cd = r.headers.get('content-disposition') || '';
+    const fname = cd.match(/filename="([^"]+)"/)?.[1] || `simployer_qa.${fmt}`;
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { alert('Export error: ' + e.message); }
+}
+</script>
+</body>
+</html>
