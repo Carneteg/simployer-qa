@@ -31,9 +31,12 @@ if settings.sentry_dsn:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.environment == "development":
+    # Always ensure tables exist (safe to run multiple times - CREATE TABLE IF NOT EXISTS)
+    try:
         await init_db()
-        logger.info("DB tables initialised (dev mode)")
+        logger.info("DB tables initialised")
+    except Exception as e:
+        logger.warning(f"init_db skipped: {e}")
     yield
 
 
