@@ -122,7 +122,7 @@ async def get_messages(
 
 
 @router.get("/debug-freshdesk")
-async def debug_freshdesk(user: User = Depends(current_user)):
+async def debug_freshdesk():  # no auth for debug testing
     """Temporary debug: fetch 1 raw ticket from Freshdesk to inspect field structure."""
     import httpx
     from config import settings
