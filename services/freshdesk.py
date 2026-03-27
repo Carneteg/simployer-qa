@@ -129,7 +129,7 @@ async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List
     while True:
         url = (
             f"{base}?updated_since={since}&per_page=100&page={page}"
-            f"&include=stats,requester,description,responder,group"
+            f"&include=stats&include=requester&include=description&include=responder"
             f"&order_by=updated_at&order_type=desc"
         )
         batch = await fd_get(url)

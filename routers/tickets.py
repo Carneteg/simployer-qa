@@ -128,7 +128,7 @@ async def debug_freshdesk(user: User = Depends(current_user)):
     from config import settings
     url = (
         f"https://{settings.freshdesk_domain}/api/v2/tickets"
-        f"?per_page=1&include=stats,responder,group&order_by=updated_at&order_type=desc"
+        f"?per_page=1&include=stats&include=responder&order_by=updated_at&order_type=desc"
     )
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
