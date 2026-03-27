@@ -125,6 +125,7 @@ async def get_messages(
 async def debug_freshdesk():
     """Debug: show raw Freshdesk ticket fields + agent/group cache status."""
     import httpx
+    import asyncio
     from config import settings
     from services.freshdesk import _load_agents, _load_groups
     try:
