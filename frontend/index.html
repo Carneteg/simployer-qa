@@ -119,6 +119,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('ch')">Churn Risk</div>
   <div class="tab" onclick="showTab('runs')">Runs</div>
   <div class="tab" onclick="showTab('exp')">Export</div>
+  <div class="tab" onclick="showTab('score')">Manual Review</div>
 </div>
 
 <!-- OVERVIEW -->
@@ -215,6 +216,23 @@ tbody td{padding:7px 9px;vertical-align:top}
     </div>
   </div>
 </div>
+</div>
+
+<!-- MANUAL REVIEW -->
+<div class="tab-content" id="tab-score">
+  <div class="panel"><h3>Manual Ticket Scorecard</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:14px;line-height:1.7">
+      Paste a raw support ticket (customer + agent messages) and generate a structured QA scorecard using Claude Sonnet.
+    </p>
+    <div class="f" style="margin-bottom:12px">
+      <label>Ticket Content</label>
+      <textarea id="sc-ticket" placeholder="Paste the full ticket conversation here — customer messages, agent replies, any context..." style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;width:100%;min-height:220px;resize:vertical;line-height:1.6;transition:border-color .2s" onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
+    </div>
+    <button class="btn btn-primary" style="width:auto;margin:0" onclick="runScorecard()" id="sc-btn">
+      ✦ Generate Scorecard
+    </button>
+    <div id="sc-result" style="margin-top:20px;display:none"></div>
+  </div>
 </div>
 
 <!-- MODAL -->
@@ -325,7 +343,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   if (id === 'runs') loadRunHistory();
@@ -628,6 +646,99 @@ async function showTicket(tid) {
 // ═══════════════════════════════════════════════════════════
 // EXPORT — direct download via API
 // ═══════════════════════════════════════════════════════════
+async function runScorecard() {
+  const ticket = document.getElementById('sc-ticket').value.trim();
+  if (!ticket) { alert('Please paste a ticket first.'); return; }
+  const btn = document.getElementById('sc-btn');
+  btn.disabled = true; btn.innerHTML = '<div class="sp"></div> Analysing...';
+  document.getElementById('sc-result').style.display = 'none';
+
+  try {
+    const r = await apiFetch('/scorecard/', {method:'POST', body: JSON.stringify({ticket})});
+    if (!r || r.error) { alert(r?.error || 'Scorecard failed'); return; }
+    renderScorecard(r);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '✦ Generate Scorecard';
+  }
+}
+
+function renderScorecard(d) {
+  const LABELS = {
+    understanding_of_issue:'Understanding of Issue',
+    accuracy_of_solution:'Accuracy of Solution',
+    completeness_of_response:'Completeness of Response',
+    clarity_of_communication:'Clarity of Communication',
+    tone_and_empathy:'Tone & Empathy',
+    efficiency:'Efficiency',
+    ownership:'Ownership',
+    proactivity:'Proactivity',
+    customer_confidence_created:'Customer Confidence Created',
+    risk_of_repeat_contact:'Risk of Repeat Contact',
+  };
+  const verdictColor = {Excellent:'var(--ok)',Strong:'var(--ok)',Acceptable:'var(--warn)',Weak:'var(--danger)',Poor:'var(--danger)'};
+  const scoreColor = s => s>=4?'var(--ok)':s>=3?'var(--warn)':'var(--danger)';
+  const scoreBg   = s => s>=4?'rgba(52,211,153,.15)':s>=3?'rgba(251,191,36,.15)':'rgba(248,113,113,.15)';
+
+  const rows = Object.entries(d.categories).map(([key, v]) => `
+    <tr>
+      <td style="padding:8px 10px;font-size:12px">${LABELS[key]||key}</td>
+      <td style="padding:8px 10px;text-align:center">
+        <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
+      </td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--dim)">${v.rationale}</td>
+    </tr>`).join('');
+
+  const strengths = (d.strengths||[]).map(s=>`<li style="margin-bottom:4px">${s}</li>`).join('');
+  const weaknesses = (d.weaknesses||[]).map(s=>`<li style="margin-bottom:4px">${s}</li>`).join('');
+
+  const html = `
+    <div style="border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:16px">
+      <div style="background:var(--s2);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-family:var(--disp);font-size:16px;font-weight:800">QA Scorecard</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:2px">Generated by Claude Sonnet</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--disp);font-size:28px;font-weight:800;color:${scoreColor(d.average_score)}">${d.average_score}<span style="font-size:14px;color:var(--dim)">/5</span></div>
+          <span style="padding:3px 12px;border-radius:10px;font-size:12px;font-weight:700;font-family:var(--mono);background:${scoreBg(d.average_score)};color:${verdictColor[d.verdict]||'var(--txt)'}">${d.verdict}</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid var(--bdr)">
+            <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:200px">Category</th>
+            <th style="padding:8px 10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:80px">Score</th>
+            <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Rationale</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div style="background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--ok);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✓ Strengths</div>
+        <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7">${strengths}</ul>
+      </div>
+      <div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;padding:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--danger);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✕ Weaknesses</div>
+        <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7">${weaknesses}</ul>
+      </div>
+    </div>
+
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-left:3px solid var(--ac);border-radius:8px;padding:14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Final QA Comment</div>
+      <p style="font-size:13px;line-height:1.8;margin:0">${d.final_comment}</p>
+    </div>`;
+
+  const el = document.getElementById('sc-result');
+  el.innerHTML = html;
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 async function doExport(fmt, churnOnly = false) {
   const runId = document.getElementById('exp-run')?.value || '';
   let url = `/export/${fmt}`;

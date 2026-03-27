@@ -15,7 +15,7 @@ import redis.asyncio as aioredis
 
 from config import settings
 from database import init_db
-from routers import auth, runs, tickets, agents, export
+from routers import auth, runs, tickets, agents, export, scorecard
 
 logging.basicConfig(
     level=logging.INFO,
