@@ -27,14 +27,20 @@ SYSTEM = (
     "Return ONLY valid JSON — no markdown, no preamble, no trailing text."
 )
 
-PROMPT = """## Data Context (Critical Instruction)
+PROMPT = """### Role
+You are a senior QA analyst reviewing support tickets.
+
+### Data Context (Critical Instruction)
 The support ticket below is the ONLY source of truth.
 - ONLY use the provided ticket data
-- Do NOT assume, infer, or invent information not found in the ticket
-- If information is missing, state: "Not enough data in ticket"
-- Be objective, evidence-based, and commercially aware
+- No assumptions outside the data
+- If unclear → state "Not enough data in ticket"
+- Be precise and evidence-based
 
-## Ticket Metadata
+### Scoring Scale
+1 = poor | 3 = acceptable | 5 = excellent
+
+### Ticket Metadata
 Subject: {subject}
 Agent: {agent}
 Group: {group}
@@ -44,13 +50,8 @@ Resolved: {resolved}
 Tags: {tags}
 SLA breached: {sla}
 
-## Conversation Thread ({msg_count} messages)
+### Conversation Thread ({msg_count} messages)
 {thread}
-
-## Instructions
-Score each of the 10 dimensions from 1–5:
-- 1 = poor, 2 = below expectations, 3 = acceptable, 4 = strong, 5 = excellent
-- risk_of_repeat_contact: 5 = very low risk, 1 = near-certain repeat contact
 
 Return this EXACT JSON (no other text):
 {{
@@ -68,16 +69,18 @@ Return this EXACT JSON (no other text):
   }},
   "average_score": 0.0,
   "verdict": "Acceptable",
-  "strengths": ["", ""],
-  "weaknesses": ["", ""],
+  "strengths": [""],
+  "weaknesses": [""],
   "final_comment": ""
 }}
 
-Rules:
-- verdict: Excellent (≥4.5) / Strong (≥3.8) / Acceptable (≥2.8) / Weak (≥2.0) / Poor (<2.0)
-- average_score = mean of all 10 scores, rounded to 1 decimal
-- strengths/weaknesses: 2–4 items each, grounded ONLY in what the ticket shows
-- final_comment: 3–5 sharp sentences useful for a support leadership team
+Scoring rules:
+- Scores 1–5 only (1=poor, 3=acceptable, 5=excellent)
+- risk_of_repeat_contact: 5=very low risk, 1=near-certain repeat
+- average_score = mean of all 10 scores, 1 decimal
+- strengths/weaknesses: 2–4 items, strictly from ticket content
+- If information is missing → state "Not enough data in ticket" in rationale
+- final_comment: 3–5 sentences covering quality, scalability, and customer trust impact
 """
 
 

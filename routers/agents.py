@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -27,7 +27,7 @@ async def list_agents(
             func.count(Evaluation.id).label("ticket_count"),
             func.round(func.avg(Evaluation.total_score), 1).label("avg_score"),
             func.sum(
-                (Evaluation.churn_risk_flag == True).cast(db.bind.dialect.type_descriptor(type(True)))
+                case((Evaluation.churn_risk_flag == True, 1), else_=0)
             ).label("churn_count"),
         )
         .join(Evaluation, and_(
@@ -88,7 +88,6 @@ async def get_agent(
     if not tickets:
         return {"agent_name": agent_name, "tickets": [], "cat_averages": {}}
 
-    # Category averages
     cat_avgs = {}
     for cat in CATS:
         scores = []
@@ -100,13 +99,14 @@ async def get_agent(
         cat_avgs[cat] = round(sum(scores) / len(scores), 1) if scores else None
 
     avg = round(sum(t["total_score"] or 0 for t in tickets) / len(tickets), 1)
+    churn_count = sum(1 for t in tickets if t["churn_risk_flag"])
 
     return {
         "agent_name": agent_name,
         "group_name": tickets[0]["group_name"],
         "ticket_count": len(tickets),
         "avg_score": avg,
-        "churn_count": sum(1 for t in tickets if t["churn_risk_flag"]),
+        "churn_count": churn_count,
         "cat_averages": cat_avgs,
         "tier": (
             "🟢 Top" if avg >= 75
