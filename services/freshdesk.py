@@ -20,9 +20,9 @@ CHURN_KEYWORDS = [
     "säger upp", "avsluta", "säga upp",
 ]
 
-# In-process caches (resets between runs, that's fine)
-_agent_cache: Dict[int, str] = {}
-_group_cache: Dict[int, str] = {}
+# In-memory caches — populated once per process lifetime
+_agent_cache: Dict[int, str] = {}   # agent_id → name
+_group_cache: Dict[int, str] = {}   # group_id → name
 
 
 async def fd_get(url: str, retries: int = 5) -> Any:
@@ -53,74 +53,63 @@ async def fd_get(url: str, retries: int = 5) -> Any:
         raise RuntimeError(f"Freshdesk max retries exceeded: {url}")
 
 
-async def get_agent_name(agent_id: int) -> Optional[str]:
-    """Fetch agent name by ID, with in-process caching."""
-    if not agent_id:
-        return None
-    if agent_id in _agent_cache:
-        return _agent_cache[agent_id]
+async def _load_agents() -> Dict[int, str]:
+    """Fetch all agents from Freshdesk and cache id → name."""
+    global _agent_cache
+    if _agent_cache:
+        return _agent_cache
     try:
-        url = f"https://{settings.freshdesk_domain}/api/v2/agents/{agent_id}"
-        data = await fd_get(url)
-        name = (data.get("contact") or {}).get("name") or data.get("name")
-        _agent_cache[agent_id] = name
-        return name
+        base = f"https://{settings.freshdesk_domain}/api/v2/agents"
+        page = 1
+        while True:
+            data = await fd_get(f"{base}?per_page=100&page={page}")
+            if not data:
+                break
+            for a in data:
+                _agent_cache[a["id"]] = (
+                    a.get("contact", {}).get("name") or
+                    a.get("name") or
+                    f"Agent #{a['id']}"
+                )
+            if len(data) < 100:
+                break
+            page += 1
+        logger.info(f"Loaded {len(_agent_cache)} agents from Freshdesk")
     except Exception as e:
-        logger.warning(f"Could not fetch agent {agent_id}: {e}")
-        _agent_cache[agent_id] = None
-        return None
+        logger.warning(f"Could not load agents: {e}")
+    return _agent_cache
 
 
-async def get_group_name(group_id: int) -> Optional[str]:
-    """Fetch group name by ID, with in-process caching."""
-    if not group_id:
-        return None
-    if group_id in _group_cache:
-        return _group_cache[group_id]
+async def _load_groups() -> Dict[int, str]:
+    """Fetch all groups from Freshdesk and cache id → name."""
+    global _group_cache
+    if _group_cache:
+        return _group_cache
     try:
-        url = f"https://{settings.freshdesk_domain}/api/v2/groups/{group_id}"
-        data = await fd_get(url)
-        name = data.get("name")
-        _group_cache[group_id] = name
-        return name
+        data = await fd_get(
+            f"https://{settings.freshdesk_domain}/api/v2/groups?per_page=100"
+        )
+        for g in (data or []):
+            _group_cache[g["id"]] = g.get("name") or f"Group #{g['id']}"
+        logger.info(f"Loaded {len(_group_cache)} groups from Freshdesk")
     except Exception as e:
-        logger.warning(f"Could not fetch group {group_id}: {e}")
-        _group_cache[group_id] = None
-        return None
-
-
-async def enrich_ticket(ticket: Dict) -> Dict:
-    """
-    Add agent_name and group_name to a ticket dict.
-    Strategy:
-      1. Use embedded responder.name / group.name if present
-      2. Fall back to fetching by responder_id / group_id
-    """
-    # Agent name
-    responder = ticket.get("responder") or {}
-    agent_name = responder.get("name")
-    if not agent_name:
-        responder_id = ticket.get("responder_id")
-        if responder_id:
-            agent_name = await get_agent_name(int(responder_id))
-
-    # Group name
-    group = ticket.get("group") or {}
-    group_name = group.get("name")
-    if not group_name:
-        group_id = ticket.get("group_id")
-        if group_id:
-            group_name = await get_group_name(int(group_id))
-
-    ticket["_agent_name"] = agent_name
-    ticket["_group_name"] = group_name
-    return ticket
+        logger.warning(f"Could not load groups: {e}")
+    return _group_cache
 
 
 async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List[Dict]:
-    """Fetch ALL resolved/closed tickets for the period — with agent/group enrichment."""
+    """Fetch ALL resolved/closed tickets for the period — no cap.
+    
+    Freshdesk list endpoint only returns responder_id / group_id.
+    We pre-load the agent + group name caches and inject them into each ticket.
+    """
     if since is None:
-        since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since = (
+            datetime.now(timezone.utc) - timedelta(days=days_back)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Pre-load name caches in parallel
+    agents, groups = await asyncio.gather(_load_agents(), _load_groups())
 
     base = f"https://{settings.freshdesk_domain}/api/v2/tickets"
     tickets: List[Dict] = []
@@ -129,7 +118,7 @@ async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List
     while True:
         url = (
             f"{base}?updated_since={since}&per_page=100&page={page}"
-            f"&include=stats&include=requester&include=description&include=responder"
+            f"&include=stats&include=requester"
             f"&order_by=updated_at&order_type=desc"
         )
         batch = await fd_get(url)
@@ -138,13 +127,17 @@ async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List
 
         resolved = [t for t in batch if t.get("status") in (4, 5)]
 
-        # Enrich tickets with agent/group names (concurrent, capped by semaphore)
-        enriched = await asyncio.gather(*[enrich_ticket(t) for t in resolved])
-        tickets.extend(enriched)
+        # Inject human-readable names from caches
+        for t in resolved:
+            rid = t.get("responder_id")
+            gid = t.get("group_id")
+            t["_agent_name"] = agents.get(rid) if rid else None
+            t["_group_name"] = groups.get(gid) if gid else None
 
+        tickets.extend(resolved)
         logger.info(
             f"Page {page}: {len(batch)} total, {len(resolved)} resolved "
-            f"(cumul: {len(tickets)}, sample agent: {enriched[0]['_agent_name'] if enriched else 'N/A'})"
+            f"(cumul: {len(tickets)})"
         )
 
         if len(batch) < 100:

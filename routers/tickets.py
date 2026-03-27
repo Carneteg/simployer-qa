@@ -122,32 +122,32 @@ async def get_messages(
 
 
 @router.get("/debug-freshdesk")
-async def debug_freshdesk():  # no auth for debug testing
-    """Temporary debug: fetch 1 raw ticket from Freshdesk to inspect field structure."""
+async def debug_freshdesk():
+    """Debug: show raw Freshdesk ticket fields + agent/group cache status."""
     import httpx
     from config import settings
-    # Try multiple URL formats to find what Freshdesk accepts
-    results = {}
-    for label, url in [
-        ("separate_includes", f"https://{settings.freshdesk_domain}/api/v2/tickets?per_page=1&include=stats&include=responder&order_by=updated_at&order_type=desc"),
-        ("no_include",        f"https://{settings.freshdesk_domain}/api/v2/tickets?per_page=1&order_by=updated_at&order_type=desc"),
-    ]:
-        try:
-            async with httpx.AsyncClient(timeout=15) as c:
-                r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
-                if r.status_code == 200:
-                    data = r.json()
-                    t = data[0] if data else {}
-                    results[label] = {
-                        "status": 200,
-                        "ticket_id": t.get("id"),
-                        "all_keys": sorted(t.keys()),
-                        "responder": t.get("responder"),
-                        "responder_id": t.get("responder_id"),
-                        "group_id": t.get("group_id"),
-                    }
-                else:
-                    results[label] = {"status": r.status_code, "body": r.text[:200]}
-        except Exception as e:
-            results[label] = {"error": str(e)}
-    return results
+    from services.freshdesk import _load_agents, _load_groups
+    try:
+        agents, groups = await asyncio.gather(_load_agents(), _load_groups())
+        url = (
+            f"https://{settings.freshdesk_domain}/api/v2/tickets"
+            f"?per_page=1&include=stats&include=requester&order_by=updated_at&order_type=desc"
+        )
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
+            data = r.json() if r.status_code == 200 else []
+        t = data[0] if data else {}
+        rid = t.get("responder_id")
+        return {
+            "status": r.status_code,
+            "ticket_id": t.get("id"),
+            "responder_id": rid,
+            "agent_name_resolved": agents.get(rid) if rid else None,
+            "group_id": t.get("group_id"),
+            "group_name_resolved": groups.get(t.get("group_id")) if t.get("group_id") else None,
+            "agent_cache_size": len(agents),
+            "group_cache_size": len(groups),
+            "ticket_keys": sorted(t.keys()) if t else [],
+        }
+    except Exception as e:
+        return {"error": str(e)}
