@@ -121,8 +121,14 @@ async def evaluate_run(ctx: dict, run_id: str):
                         id=ticket_id,
                         user_id=user_id,
                         subject=ticket.get("subject"),
-                        agent_name=(ticket.get("responder") or {}).get("name"),
-                        group_name=(ticket.get("group") or {}).get("name"),
+                        agent_name=(
+                            ticket.get("_agent_name") or
+                            (ticket.get("responder") or {}).get("name")
+                        ),
+                        group_name=(
+                            ticket.get("_group_name") or
+                            (ticket.get("group") or {}).get("name")
+                        ),
                         status=ticket.get("status"),
                         priority=ticket.get("priority"),
                         csat=(ticket.get("satisfaction_rating") or {}).get("rating"),
@@ -136,7 +142,10 @@ async def evaluate_run(ctx: dict, run_id: str):
                         index_elements=["id", "user_id"],
                         set_={
                             "subject":    ticket.get("subject"),
-                            "agent_name": (ticket.get("responder") or {}).get("name"),
+                            "agent_name": (
+                                ticket.get("_agent_name") or
+                                (ticket.get("responder") or {}).get("name")
+                            ),
                             "updated_at": updated_at,   # datetime object, not string
                         }
                     )
