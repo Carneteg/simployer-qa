@@ -119,3 +119,29 @@ async def get_messages(
         {"role": m.role, "ts": str(m.ts or "")[:16].replace("T", " "), "body": m.body}
         for m in msgs
     ]
+
+
+@router.get("/debug-freshdesk")
+async def debug_freshdesk(user: User = Depends(current_user)):
+    """Temporary debug: fetch 1 raw ticket from Freshdesk to inspect field structure."""
+    import httpx
+    from config import settings
+    url = (
+        f"https://{settings.freshdesk_domain}/api/v2/tickets"
+        f"?per_page=1&include=stats,responder,group&order_by=updated_at&order_type=desc"
+    )
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
+        r.raise_for_status()
+        data = r.json()
+    if not data:
+        return {"error": "No tickets returned"}
+    t = data[0]
+    return {
+        "ticket_id": t.get("id"),
+        "all_keys": sorted(t.keys()),
+        "responder": t.get("responder"),
+        "group": t.get("group"),
+        "responder_id": t.get("responder_id"),
+        "group_id": t.get("group_id"),
+    }
