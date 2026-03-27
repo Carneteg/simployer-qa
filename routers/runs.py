@@ -1,14 +1,14 @@
 import uuid
+import asyncio
 from typing import List, Optional
 
-import arq
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from database import get_db
+from database import get_db, AsyncSessionLocal
 from models import Run, User
 from routers.auth import current_user
 
@@ -50,9 +50,39 @@ class RunOut(BaseModel):
         )
 
 
+async def _run_evaluation_task(run_id: str):
+    """
+    FastAPI background task — runs the full evaluation in-process.
+    No separate worker or arq required.
+    """
+    import logging
+    logger = logging.getLogger("simployer.runs")
+
+    # Build a fake arq-style ctx with redis if available, otherwise no pub/sub
+    class FakeRedis:
+        async def publish(self, channel, message):
+            logger.debug(f"[no-redis] {channel}: {message[:80]}")
+
+    ctx = {"redis": FakeRedis()}
+
+    try:
+        from services.evaluator import evaluate_run
+        await evaluate_run(ctx, run_id)
+    except Exception as e:
+        logger.error(f"Background evaluation failed for run {run_id}: {e}")
+        # Update run status to failed
+        async with AsyncSessionLocal() as db:
+            run = await db.get(Run, uuid.UUID(run_id))
+            if run:
+                run.status = "failed"
+                run.error = str(e)
+                await db.commit()
+
+
 @router.post("/", status_code=202)
 async def start_run(
     body: RunCreate,
+    background_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -61,9 +91,8 @@ async def start_run(
     await db.commit()
     await db.refresh(run)
 
-    pool = await arq.create_pool(settings.redis_settings)
-    await pool.enqueue_job("evaluate_run", str(run.id))
-    await pool.close()
+    # Run evaluation as FastAPI background task (no arq worker needed)
+    background_tasks.add_task(_run_evaluation_task, str(run.id))
 
     return {"run_id": str(run.id), "status": "queued"}
 

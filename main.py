@@ -11,7 +11,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import redis.asyncio as aioredis
 
 from config import settings
 from database import init_db
@@ -78,32 +77,47 @@ async def health():
 @app.websocket("/ws/runs/{run_id}")
 async def run_progress(ws: WebSocket, run_id: str):
     """
-    Subscribe to Redis pub/sub channel for a specific run.
-    Forwards progress events to the browser as JSON.
+    Poll the database every 2s and stream run progress to the browser.
+    Works without Redis pub/sub — compatible with Render free tier.
     """
-    await ws.accept()
-    r = aioredis.from_url(settings.redis_url, decode_responses=True)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(f"run:{run_id}")
+    from database import AsyncSessionLocal
+    from models import Run
+    import uuid as _uuid
 
+    await ws.accept()
     try:
         while True:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message and message.get("type") == "message":
-                await ws.send_text(message["data"])
-                # Close WebSocket when run finishes
+            async with AsyncSessionLocal() as db:
                 try:
-                    data = json.loads(message["data"])
-                    if data.get("status") in ("done", "failed"):
-                        break
+                    run = await db.get(Run, _uuid.UUID(run_id))
                 except Exception:
-                    pass
-            await asyncio.sleep(0.1)
+                    run = None
+
+            if run:
+                pct = 0
+                if run.tickets_total and run.tickets_total > 0:
+                    pct = round(run.tickets_done / run.tickets_total * 100)
+
+                payload = json.dumps({
+                    "run_id": run_id,
+                    "status": run.status,
+                    "done": run.tickets_done,
+                    "total": run.tickets_total,
+                    "churn": run.churn_count,
+                    "pct": pct,
+                    "error": run.error,
+                })
+                try:
+                    await ws.send_text(payload)
+                except Exception:
+                    break
+
+                if run.status in ("done", "failed"):
+                    break
+
+            await asyncio.sleep(2)
     except WebSocketDisconnect:
         pass
-    finally:
-        await pubsub.unsubscribe(f"run:{run_id}")
-        await r.close()
 
 
 # ── Serve frontend ────────────────────────────────────────────────────────────
