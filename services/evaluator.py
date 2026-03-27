@@ -64,6 +64,19 @@ async def evaluate_run(ctx: dict, run_id: str):
                     frt = frt_minutes(ticket)
 
                     # Upsert ticket
+                    def _parse_dt(val):
+                        """Parse ISO datetime string to datetime object."""
+                        if not val:
+                            return None
+                        if hasattr(val, 'year'):
+                            return val
+                        from datetime import datetime, timezone
+                        try:
+                            s = str(val).replace("Z", "+00:00")
+                            return datetime.fromisoformat(s)
+                        except Exception:
+                            return None
+
                     stmt = pg_insert(Ticket).values(
                         id=ticket_id,
                         user_id=user_id,
@@ -76,9 +89,9 @@ async def evaluate_run(ctx: dict, run_id: str):
                         tags=ticket.get("tags") or [],
                         fr_escalated=bool(ticket.get("fr_escalated")),
                         nr_escalated=bool(ticket.get("nr_escalated")),
-                        created_at=ticket.get("created_at"),
-                        resolved_at=(ticket.get("stats") or {}).get("resolved_at"),
-                        updated_at=ticket.get("updated_at"),
+                        created_at=_parse_dt(ticket.get("created_at")),
+                        resolved_at=_parse_dt((ticket.get("stats") or {}).get("resolved_at")),
+                        updated_at=_parse_dt(ticket.get("updated_at")),
                     ).on_conflict_do_update(
                         index_elements=["id", "user_id"],
                         set_={
@@ -101,7 +114,7 @@ async def evaluate_run(ctx: dict, run_id: str):
                             ticket_id=ticket_id,
                             user_id=user_id,
                             role=msg["role"],
-                            ts=msg["ts"] or None,
+                            ts=_parse_dt(msg["ts"]),
                             body=msg["body"],
                         ))
                     await db.commit()
