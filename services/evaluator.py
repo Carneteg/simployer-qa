@@ -39,6 +39,25 @@ def _dt(val) -> datetime | None:
         return None
 
 
+async def _keep_alive(app_url: str, stop_event: asyncio.Event):
+    """Ping own health endpoint every 10min to prevent Render free tier sleep."""
+    import httpx
+    while not stop_event.is_set():
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.get(f"{app_url}/health")
+                logger.debug("Keep-alive ping sent")
+        except Exception:
+            pass
+        # Wait 10 minutes or until stop signal
+        try:
+            await asyncio.wait_for(asyncio.shield(asyncio.ensure_future(
+                asyncio.sleep(600)
+            )), timeout=600)
+        except Exception:
+            pass
+
+
 async def evaluate_run(ctx: dict, run_id: str):
     """
     Main evaluation job — works as both an arq job and a FastAPI BackgroundTask.
@@ -56,6 +75,12 @@ async def evaluate_run(ctx: dict, run_id: str):
         run.status = "running"
         run.started_at = datetime.now(timezone.utc)
         await db.commit()
+
+        # Keep-alive: prevent Render free tier from sleeping mid-run
+        from config import settings as _cfg
+        _stop = asyncio.Event()
+        _app_url = getattr(_cfg, 'app_url', 'https://simployer-qa.onrender.com')
+        _ka_task = asyncio.create_task(_keep_alive(_app_url, _stop))
 
         async def push(done: int, total: int, churn: int):
             try:
@@ -187,6 +212,7 @@ async def evaluate_run(ctx: dict, run_id: str):
                 await asyncio.sleep(2)  # Rate limit breathing room
 
             # ── Done ────────────────────────────────────────────────────────
+            _stop.set()
             run.status = "done"
             run.finished_at = datetime.now(timezone.utc)
             await db.commit()
@@ -202,6 +228,7 @@ async def evaluate_run(ctx: dict, run_id: str):
             )
 
         except Exception as e:
+            _stop.set()
             run.status = "failed"
             run.error = str(e)
             run.finished_at = datetime.now(timezone.utc)
