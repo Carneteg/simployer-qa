@@ -126,22 +126,28 @@ async def debug_freshdesk():  # no auth for debug testing
     """Temporary debug: fetch 1 raw ticket from Freshdesk to inspect field structure."""
     import httpx
     from config import settings
-    url = (
-        f"https://{settings.freshdesk_domain}/api/v2/tickets"
-        f"?per_page=1&include=stats&include=responder&order_by=updated_at&order_type=desc"
-    )
-    async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
-        r.raise_for_status()
-        data = r.json()
-    if not data:
-        return {"error": "No tickets returned"}
-    t = data[0]
-    return {
-        "ticket_id": t.get("id"),
-        "all_keys": sorted(t.keys()),
-        "responder": t.get("responder"),
-        "group": t.get("group"),
-        "responder_id": t.get("responder_id"),
-        "group_id": t.get("group_id"),
-    }
+    # Try multiple URL formats to find what Freshdesk accepts
+    results = {}
+    for label, url in [
+        ("separate_includes", f"https://{settings.freshdesk_domain}/api/v2/tickets?per_page=1&include=stats&include=responder&order_by=updated_at&order_type=desc"),
+        ("no_include",        f"https://{settings.freshdesk_domain}/api/v2/tickets?per_page=1&order_by=updated_at&order_type=desc"),
+    ]:
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(url, auth=(settings.freshdesk_api_key, "X"))
+                if r.status_code == 200:
+                    data = r.json()
+                    t = data[0] if data else {}
+                    results[label] = {
+                        "status": 200,
+                        "ticket_id": t.get("id"),
+                        "all_keys": sorted(t.keys()),
+                        "responder": t.get("responder"),
+                        "responder_id": t.get("responder_id"),
+                        "group_id": t.get("group_id"),
+                    }
+                else:
+                    results[label] = {"status": r.status_code, "body": r.text[:200]}
+        except Exception as e:
+            results[label] = {"error": str(e)}
+    return results
