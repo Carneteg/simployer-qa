@@ -177,6 +177,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('fqa')">Full Analysis</div>
   <div class="tab" onclick="showTab('iqa')">Issue Analysis</div>
   <div class="tab" onclick="showTab('sc2')">QA Scorecard</div>
+  <div class="tab" onclick="showTab('ci')">Customer Intel</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -1145,6 +1146,114 @@ tbody td{padding:7px 9px;vertical-align:top}
   </div>
 </div>
 
+<!-- CUSTOMER INTELLIGENCE -->
+<div class="tab-content" id="tab-ci">
+  <div style="max-width:960px;margin:0 auto">
+
+    <!-- Header -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+      <div style="font-family:var(--disp);font-size:15px;font-weight:800;margin-bottom:3px">Customer Lifecycle Intelligence</div>
+      <div style="font-size:12px;color:var(--dim)">Root cause analysis · Churn &amp; termination risk · Lifecycle fit · Cross-ticket pattern detection · Recommendation engine</div>
+    </div>
+
+    <!-- Search -->
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Company ID</label>
+        <input id="ci-cid" type="text" placeholder="e.g. 12345"
+          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')runCi()"/>
+      </div>
+      <div style="min-width:200px">
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Or pick company from loaded data</label>
+        <select id="ci-company-sel"
+          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-size:12px;outline:none;height:38px"
+          onchange="if(this.value){document.getElementById('ci-cid').value=this.value}">
+          <option value="">— select company —</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="runCi()" id="ci-btn" style="height:38px;margin:0">
+        ✦ Analyse Customer
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="ci-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Analysing full customer history…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">Root cause · Churn risk · Lifecycle fit · Recommendations</div>
+    </div>
+    <div id="ci-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
+    <div id="ci-empty" style="padding:48px;text-align:center;color:var(--dim)">
+      <div style="font-size:42px;margin-bottom:12px">🔭</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Customer Lifecycle Intelligence</div>
+      <div style="font-size:12px;line-height:1.8;max-width:520px;margin:0 auto">
+        Enter a Company ID or pick from the dropdown to run a full cross-ticket analysis.<br>
+        The system will examine all historical tickets, identify root causes, assess churn risk, evaluate lifecycle fit, and generate concrete recommendations.
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div id="ci-result" style="display:none">
+
+      <!-- Account + History hero -->
+      <div id="ci-hero" style="border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:14px"></div>
+
+      <!-- Executive summary -->
+      <div id="ci-exec-wrap" style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:14px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Executive Summary</div>
+        <p id="ci-exec" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Three-column risk cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px" id="ci-risk-cards"></div>
+
+      <!-- Root cause -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Root Cause Analysis</span>
+        </div>
+        <div id="ci-root" style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
+      </div>
+
+      <!-- Lifecycle -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Lifecycle Assessment</span>
+          <span id="ci-lc-badge" style="font-size:11px;font-weight:700"></span>
+        </div>
+        <div id="ci-lifecycle" style="padding:14px"></div>
+      </div>
+
+      <!-- Recommendations -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Recommendation Engine</span>
+        </div>
+        <div id="ci-recs" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--bdr)"></div>
+      </div>
+
+      <!-- Support history stats -->
+      <details style="border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+          📊 Support History Detail
+          <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+        </summary>
+        <div id="ci-history-detail" style="padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"></div>
+      </details>
+
+      <!-- Missing data / confidence -->
+      <div id="ci-missing-wrap" style="display:none;padding:12px 14px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:8px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚠ Data Gaps</div>
+        <ul id="ci-missing" style="margin:0;padding-left:18px;font-size:12px;line-height:1.8"></ul>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // CONFIG
@@ -1487,7 +1596,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -1507,7 +1616,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -1519,6 +1628,7 @@ function showTab(id) {
   if (id === 'fqa')  fqaInit();
   if (id === 'iqa')  iqaInit();
   if (id === 'sc2')  sc2Init();
+  if (id === 'ci')   ciInit();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -3568,6 +3678,306 @@ function _renderSc2(d) {
 
 
 
+
+
+
+// ═══════════════════════════════════════════════════════════
+// CUSTOMER INTELLIGENCE
+// ═══════════════════════════════════════════════════════════
+
+const CI_RISK_LEVEL_STYLE = {
+  Low:      {color:'var(--ok)',     bg:'rgba(52,211,153,.12)',  label:'🟢 Low'},
+  Medium:   {color:'var(--warn)',   bg:'rgba(251,191,36,.12)',  label:'🟠 Medium'},
+  High:     {color:'var(--danger)', bg:'rgba(248,113,113,.12)', label:'🔴 High'},
+  Critical: {color:'#ef4444',       bg:'rgba(239,68,68,.15)',   label:'🚨 Critical'},
+};
+const CI_TRAJ_STYLE = {
+  Improving:    {color:'var(--ok)',     icon:'↗'},
+  Stable:       {color:'var(--dim)',    icon:'→'},
+  Deteriorating:{color:'var(--warn)',   icon:'↘'},
+  Critical:     {color:'var(--danger)', icon:'⚠'},
+};
+const CI_REC_STYLE = {
+  Immediate:  {color:'var(--danger)', bg:'rgba(248,113,113,.08)', border:'rgba(248,113,113,.25)'},
+  Preventive: {color:'var(--warn)',   bg:'rgba(251,191,36,.07)',  border:'rgba(251,191,36,.25)'},
+  Structural: {color:'var(--ac2)',    bg:'rgba(91,106,240,.06)',  border:'rgba(91,106,240,.25)'},
+};
+
+function ciInit() {
+  // Populate company dropdown from loaded evals
+  const sel = document.getElementById('ci-company-sel');
+  if (!sel) return;
+  // Build company list from State.evals
+  const companies = {};
+  (State?.evals || []).forEach(e => {
+    if (e.company_id && e.company_name) {
+      if (!companies[e.company_id]) companies[e.company_id] = e.company_name;
+    }
+  });
+  const existing = new Set([...sel.options].map(o=>o.value));
+  Object.entries(companies)
+    .sort((a,b)=>a[1].localeCompare(b[1]))
+    .forEach(([id, name]) => {
+      if (!existing.has(id)) {
+        const opt = document.createElement('option');
+        opt.value = id; opt.textContent = `${name} (${id})`;
+        sel.appendChild(opt);
+      }
+    });
+}
+
+async function runCi() {
+  const cid = document.getElementById('ci-cid')?.value?.trim();
+  if (!cid) { document.getElementById('ci-cid')?.focus(); return; }
+
+  document.getElementById('ci-empty').style.display   = 'none';
+  document.getElementById('ci-result').style.display  = 'none';
+  document.getElementById('ci-error').style.display   = 'none';
+  document.getElementById('ci-loading').style.display = 'block';
+  document.getElementById('ci-btn').disabled = true;
+  document.getElementById('ci-btn').innerHTML = '<div class="sp"></div> Analysing…';
+
+  try {
+    const d = await apiFetch('/customer-intelligence/', {
+      method:'POST', body:JSON.stringify({company_id: cid})
+    });
+    if (!d) throw new Error('Empty response');
+    if (d.detail) throw new Error(d.detail);
+    _renderCi(d);
+  } catch(err) {
+    document.getElementById('ci-loading').style.display = 'none';
+    document.getElementById('ci-error').style.display   = 'block';
+    document.getElementById('ci-error').textContent     = 'Error: ' + err.message;
+    document.getElementById('ci-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('ci-btn').disabled  = false;
+    document.getElementById('ci-btn').innerHTML = '❆ Analyse Customer';
+  }
+}
+
+function _ciBar(val, color, max=100) {
+  const pct = Math.round(Math.min(100, (val/max)*100));
+  return `<div style="height:6px;background:var(--bdr);border-radius:3px;overflow:hidden;margin-top:4px">
+    <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+  </div>`;
+}
+function _ciScoreColor(s) { return s>=75?'var(--ok)':s>=50?'var(--warn)':'var(--danger)'; }
+
+function _renderCi(d) {
+  document.getElementById('ci-loading').style.display = 'none';
+  document.getElementById('ci-empty').style.display   = 'none';
+  document.getElementById('ci-error').style.display   = 'none';
+  document.getElementById('ci-result').style.display  = 'block';
+
+  const acc  = d.account   || {};
+  const hist = d.history   || {};
+  const rc   = d.root_cause || {};
+  const cr   = d.churn_risk || {};
+  const lc   = d.lifecycle  || {};
+  const recs = d.recommendations || {};
+
+  const rlStyle  = CI_RISK_LEVEL_STYLE[cr.risk_level] || CI_RISK_LEVEL_STYLE.Low;
+  const trajStyle= CI_TRAJ_STYLE[cr.risk_trajectory]  || CI_TRAJ_STYLE.Stable;
+  const lcFitCol = _ciScoreColor(lc.lifecycle_fit_score||0);
+
+  // ── Hero ──────────────────────────────────────────────────────────────────
+  document.getElementById('ci-hero').innerHTML = `
+    <div style="padding:14px 18px;background:var(--s2);border-bottom:1px solid var(--bdr);display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:16px;font-weight:900;margin-bottom:3px">${acc.company_name||acc.company_id}</div>
+        <div style="font-size:11px;color:var(--dim)">
+          ID: ${acc.company_id} · ${acc.lifecycle_phase} · ${acc.planhat_segment}
+          ${acc.arr ? ` · NOK ${(acc.arr/1000000).toFixed(2)}M ARR` : ''}
+          ${acc.planhat_health != null ? ` · Health ${acc.planhat_health}` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="text-align:center;min-width:60px">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:${rlStyle.color}">${cr.churn_risk_score||'—'}</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Churn Risk</div>
+        </div>
+        <div style="text-align:center;min-width:60px">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:${cr.termination_risk>50?'var(--danger)':'var(--warn)'}">${cr.termination_risk||'—'}</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Term. Risk</div>
+        </div>
+        <div style="text-align:center;min-width:60px">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:${lcFitCol}">${lc.lifecycle_fit_score||'—'}</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">LC Fit</div>
+        </div>
+        <div style="text-align:center;min-width:60px">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--ac)">${hist.total_tickets}</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Tickets</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--bdr)">
+      ${[
+        {label:'Avg QA', val: hist.avg_qa_score ? hist.avg_qa_score+'/100' : '—', color: _ciScoreColor(hist.avg_qa_score||0)},
+        {label:'Churn flags', val: hist.churn_count+' ('+hist.churn_pct+'%)', color: hist.churn_pct>20?'var(--danger)':'var(--warn)'},
+        {label:'Avg/month', val: hist.avg_per_month, color:'var(--txt)'},
+        {label:'Escalations', val: hist.escalated_count, color: hist.escalated_count>2?'var(--danger)':'var(--dim)'},
+        {label:'Bad CX', val: hist.cx_bad_pct+'%', color: hist.cx_bad_pct>30?'var(--danger)':'var(--warn)'},
+        {label:'Avg CSAT', val: hist.avg_csat||'—', color:'var(--txt)'},
+        {label:'Risk', val: rlStyle.label, color: rlStyle.color},
+        {label:'Trajectory', val: trajStyle.icon+' '+cr.risk_trajectory, color: trajStyle.color},
+      ].map(k=>`<div style="background:var(--bg);padding:10px 12px;text-align:center">
+        <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${k.color}">${k.val}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px">${k.label}</div>
+      </div>`).join('')}
+    </div>`;
+
+  // Executive summary
+  document.getElementById('ci-exec').textContent = d.executive_summary || '';
+
+  // ── Risk cards ─────────────────────────────────────────────────────────────
+  document.getElementById('ci-risk-cards').innerHTML = [
+    {
+      title: '🔥 Churn Risk',
+      score: cr.churn_risk_score,
+      level: cr.risk_level,
+      style: rlStyle,
+      items: cr.top_drivers || [],
+      evidence: cr.key_evidence || '',
+    },
+    {
+      title: '⚠ Termination Risk',
+      score: cr.termination_risk,
+      level: cr.termination_risk >= 70 ? 'Critical' : cr.termination_risk >= 50 ? 'High' : cr.termination_risk >= 30 ? 'Medium' : 'Low',
+      style: CI_RISK_LEVEL_STYLE[cr.termination_risk>=70?'Critical':cr.termination_risk>=50?'High':cr.termination_risk>=30?'Medium':'Low'],
+      items: cr.reason_codes || [],
+      evidence: '',
+    },
+    {
+      title: '🌀 Root Cause',
+      score: rc.confidence,
+      level: rc.confidence>=80?'High':rc.confidence>=60?'Medium':'Low',
+      style: {color:'var(--ac2)', bg:'rgba(91,106,240,.08)', label: rc.primary_category||'—'},
+      items: rc.recurring_themes || [],
+      evidence: rc.pattern_description || '',
+    },
+  ].map(card => `
+    <div style="background:${card.style.bg};border:1px solid var(--bdr);border-radius:10px;padding:14px">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:${card.style.color};text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${card.title}</div>
+      <div style="font-family:var(--mono);font-size:28px;font-weight:900;color:${card.style.color};line-height:1;margin-bottom:4px">${card.score||'—'}</div>
+      ${_ciBar(card.score||0, card.style.color)}
+      <div style="font-size:11px;font-weight:600;color:${card.style.color};margin-top:6px;margin-bottom:8px">${card.style.label}</div>
+      ${card.items.filter(Boolean).slice(0,3).map(i=>`<div style="font-size:11px;color:var(--dim);margin-bottom:2px">• ${i}</div>`).join('')}
+      ${card.evidence ? `<div style="font-size:11px;color:var(--dim);font-style:italic;margin-top:6px;border-top:1px solid var(--bdr);padding-top:6px">${card.evidence.slice(0,100)}</div>` : ''}
+    </div>`).join('');
+
+  // ── Root cause detail ──────────────────────────────────────────────────────
+  document.getElementById('ci-root').innerHTML = `
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Primary Analysis</div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px">${rc.primary_category||'—'}
+        ${rc.secondary_category ? `<span style="font-size:11px;color:var(--dim);font-weight:400;margin-left:6px">+ ${rc.secondary_category}</span>` : ''}
+      </div>
+      <div style="font-size:12px;color:var(--dim);line-height:1.7;margin-bottom:8px">${rc.explanation||'—'}</div>
+      <div style="display:flex;gap:8px;align-items:center;font-size:11px">
+        <span style="color:var(--dim)">Confidence:</span>
+        <span style="font-family:var(--mono);font-weight:700;color:${_ciScoreColor(rc.confidence||0)}">${rc.confidence||'—'}/100</span>
+        <span style="color:var(--dim)">· ${rc.is_isolated ? 'Isolated ticket' : rc.affected_tickets+' tickets affected'}</span>
+      </div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recurring Themes</div>
+      ${(rc.recurring_themes||[]).filter(Boolean).map(t=>`
+        <div style="padding:7px 10px;background:var(--s2);border-radius:6px;font-size:12px;margin-bottom:5px;border:1px solid var(--bdr)">${t}</div>
+      `).join('')}
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pattern Description</div>
+      <div style="font-size:12px;color:var(--dim);line-height:1.6;font-style:italic">${rc.pattern_description||'—'}</div>
+    </div>`;
+
+  // ── Lifecycle assessment ───────────────────────────────────────────────────
+  const lcMismatch = lc.mismatch_flag || lc.premature_phase_movement_flag;
+  document.getElementById('ci-lc-badge').innerHTML =
+    lcMismatch
+      ? `<span style="color:var(--danger);font-weight:700">⚠ Mismatch Detected</span>`
+      : `<span style="color:var(--ok);font-weight:700">✓ Lifecycle Appropriate</span>`;
+
+  document.getElementById('ci-lifecycle').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="text-align:center;padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--bdr)">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${lcFitCol}">${lc.lifecycle_fit_score||'—'}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px">Lifecycle Fit Score</div>
+      </div>
+      <div style="padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--bdr)">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px">Current phase</div>
+        <div style="font-size:13px;font-weight:700">${lc.current_phase||acc.lifecycle_phase||'—'}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:4px">Assessed actual phase</div>
+        <div style="font-size:12px;font-weight:600;color:${lc.mismatch_flag?'var(--danger)':'var(--ok)'}">${lc.assessed_actual_phase||'—'}</div>
+      </div>
+      <div style="padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--bdr)">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px">Ticket volume</div>
+        <div style="font-size:12px;line-height:1.5">${lc.ticket_volume_vs_expected||'—'}</div>
+      </div>
+    </div>
+    ${lc.mismatch_flag || lc.premature_phase_movement_flag ? `
+      <div style="padding:10px 14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--danger);line-height:1.6">
+        ${lc.premature_phase_movement_flag ? '⚠ <strong>Premature phase movement detected</strong> — ' : ''}
+        ${lc.mismatch_explanation||''}
+      </div>` : ''}
+    <div style="font-size:12px;line-height:1.7;color:var(--dim)">
+      <strong style="color:var(--txt)">Phase recommendation:</strong> ${lc.phase_recommendation||'—'}
+    </div>`;
+
+  // ── Recommendations ────────────────────────────────────────────────────────
+  const recSections = [
+    {key:'ticket_level',  title:'🎫 Ticket Level',   sub:'Agent behaviour gaps'},
+    {key:'customer_level',title:'👤 Customer Level',  sub:'What to do for this customer'},
+    {key:'process_level', title:'⚙ Process / Org',   sub:'Structural improvements'},
+  ];
+  document.getElementById('ci-recs').innerHTML = recSections.map(sec => {
+    const items = (recs[sec.key]||[]).filter(r=>r.action);
+    return `<div style="background:var(--bg);padding:14px">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">${sec.title}</div>
+      <div style="font-size:10px;color:var(--dim);font-style:italic;margin-bottom:10px">${sec.sub}</div>
+      ${items.map(r => {
+        const rs = CI_REC_STYLE[r.type] || CI_REC_STYLE.Structural;
+        return `<div style="padding:9px 11px;background:${rs.bg};border:1px solid ${rs.border};border-radius:7px;margin-bottom:7px">
+          <div style="font-size:10px;font-weight:700;color:${rs.color};text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${r.type}</div>
+          <div style="font-size:12px;line-height:1.6;margin-bottom:3px">${r.action}</div>
+          <div style="font-size:11px;color:var(--dim);font-style:italic">${r.rationale||''}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+
+  // ── History detail ─────────────────────────────────────────────────────────
+  const histKpis = [
+    {label:'Total tickets',     val:hist.total_tickets},
+    {label:'Evaluated',         val:hist.evaluated_tickets},
+    {label:'Date range',        val:hist.date_range?.slice(0,21)},
+    {label:'Avg/month',         val:hist.avg_per_month},
+    {label:'Avg QA',            val:hist.avg_qa_score ? hist.avg_qa_score+'/100' : '—'},
+    {label:'Churn flags',       val:hist.churn_count+' ('+hist.churn_pct+'%)'},
+    {label:'Escalations',       val:hist.escalated_count},
+    {label:'SLA breaches',      val:hist.sla_breach_count},
+    {label:'Avg CSAT',          val:hist.avg_csat||'—'},
+    {label:'Contact problems',  val:hist.contact_problem_count},
+    {label:'Avg resolution',    val:hist.avg_resolution_days ? hist.avg_resolution_days.toFixed(1)+'d' : '—'},
+    {label:'Confidence',        val:(d.confidence_overall||0)+'%'},
+  ];
+  document.getElementById('ci-history-detail').innerHTML = histKpis.map(k=>
+    `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;text-align:center">
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700">${k.val}</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px">${k.label}</div>
+    </div>`
+  ).join('');
+
+  // ── Missing data ───────────────────────────────────────────────────────────
+  const missing = (d.missing_data_flags||[]).filter(Boolean);
+  const mw = document.getElementById('ci-missing-wrap');
+  if (missing.length) {
+    mw.style.display = 'block';
+    document.getElementById('ci-missing').innerHTML =
+      missing.map(m=>`<li style="margin-bottom:3px">${m}</li>`).join('');
+  } else {
+    mw.style.display = 'none';
+  }
+
+  document.getElementById('ci-result').scrollIntoView({behavior:'smooth', block:'start'});
+}
 
 </script>
 </body>
