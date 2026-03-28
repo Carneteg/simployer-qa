@@ -162,6 +162,25 @@ async def cx_stats(user: User = Depends(current_user), db: AsyncSession = Depend
     mismatch    = int(row["mismatch_count"] or 0)
     confirmed   = int(row["confirmed_churn"] or 0)
 
+    # ARR at risk — sum of ARR for churn-flagged tickets (unique per company)
+    from models import Ticket
+    arr_result = await db.execute(
+        select(
+            func.sum(Ticket.arr).label("arr_at_risk"),
+            func.count(func.distinct(Ticket.company_id)).label("companies_at_risk"),
+        )
+        .join(Evaluation, and_(
+            Evaluation.ticket_id == Ticket.id,
+            Evaluation.user_id == Ticket.user_id,
+        ))
+        .where(
+            Ticket.user_id == user.id,
+            Evaluation.churn_risk_flag == True,
+            Ticket.arr != None,
+        )
+    )
+    arr_row = arr_result.mappings().first()
+
     return {
         "total_tickets":        total,
         "cx_bad_count":         cx_bad,
@@ -177,10 +196,11 @@ async def cx_stats(user: User = Depends(current_user), db: AsyncSession = Depend
             float(row["avg_score_good_cx"] or 0) -
             float(row["avg_score_bad_cx"] or 0), 1
         ),
+        "arr_at_risk":          float(arr_row["arr_at_risk"] or 0) if arr_row else 0,
+        "companies_at_risk":    int(arr_row["companies_at_risk"] or 0) if arr_row else 0,
         "note": (
             "mismatch = tickets where cx_bad=True AND total_score>75. "
-            "These are high-QA tickets with bad CX reality — "
-            "the core signal this feature was built to detect."
+            "arr_at_risk = sum of ARR for unique companies with churn_risk_flag=True."
         ),
     }
 

@@ -72,6 +72,13 @@ class Ticket(Base):
     created_at:   Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     resolved_at:  Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     updated_at:   Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # ── Company / ARR fields (from Freshdesk company record) ─────────────────
+    company_id:          Mapped[Optional[str]]   = mapped_column(String)
+    company_name:        Mapped[Optional[str]]   = mapped_column(String)
+    arr:                 Mapped[Optional[float]]  = mapped_column(Numeric(12, 2))
+    planhat_phase:       Mapped[Optional[str]]   = mapped_column(String)
+    planhat_health:      Mapped[Optional[int]]   = mapped_column(Integer)
+    planhat_segmentation: Mapped[Optional[str]]  = mapped_column(String)
 
     user:        Mapped["User"]             = relationship("User", back_populates="tickets")
     messages:    Mapped[List["Message"]]    = relationship("Message",    primaryjoin="and_(Message.ticket_id==Ticket.id, Message.user_id==Ticket.user_id)", foreign_keys="[Message.ticket_id, Message.user_id]")

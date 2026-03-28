@@ -545,7 +545,20 @@ function renderOv() {
   document.getElementById('s1').textContent = avg;
   document.getElementById('s1').className = 'stv ' + (avg>=75?'vo':avg>=55?'vw':'vd');
   document.getElementById('s2').textContent = chN;
-  document.getElementById('s3').textContent = '—';
+  // ARR at risk — fetch from cx-stats
+    apiFetch('/debug/cx-stats').then(cx => {
+      if (cx && cx.arr_at_risk > 0) {
+        const arrM = (cx.arr_at_risk / 1000000).toFixed(2);
+        const arrK = (cx.arr_at_risk / 1000).toFixed(0);
+        document.getElementById('s3').textContent = cx.arr_at_risk >= 1000000
+          ? arrM + 'M'
+          : arrK + 'K';
+        document.getElementById('s3').title = cx.companies_at_risk + ' companies | ' +
+          new Intl.NumberFormat('nb-NO', {style:'currency', currency:'NOK', maximumFractionDigits:0}).format(cx.arr_at_risk);
+      } else {
+        document.getElementById('s3').textContent = '—';
+      }
+    }).catch(() => { document.getElementById('s3').textContent = '—'; });
   document.getElementById('s4').textContent = coN;
 
   const catA = {};

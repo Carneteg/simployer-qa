@@ -57,8 +57,9 @@ CHURN_KEYWORDS = [
 ]
 
 # In-memory caches — populated once per process lifetime
-_agent_cache: Dict[int, str] = {}   # agent_id → name
-_group_cache: Dict[int, str] = {}   # group_id → name
+_agent_cache:   Dict[int, str]  = {}   # agent_id → name
+_group_cache:   Dict[int, str]  = {}   # group_id → name
+_company_cache: Dict[int, Dict] = {}   # company_id → {name, arr, planhat_phase, ...}
 
 
 async def fd_get(url: str, retries: int = 5) -> Any:
@@ -131,6 +132,55 @@ async def _load_groups() -> Dict[int, str]:
     except Exception as e:
         logger.warning(f"Could not load groups: {e}")
     return _group_cache
+
+
+async def fetch_company(company_id: int) -> Dict:
+    """
+    Fetch company record from Freshdesk and extract ARR + Planhat fields.
+    Results are cached for the process lifetime (company data changes rarely).
+    """
+    if company_id in _company_cache:
+        return _company_cache[company_id]
+
+    try:
+        url = f"https://{settings.freshdesk_domain}/api/v2/companies/{company_id}"
+        data = await fd_get(url)
+        if not data:
+            _company_cache[company_id] = {}
+            return {}
+
+        cf = data.get("custom_fields") or {}
+
+        # Parse ARR — prefer the direct 'arr' field, fall back to planhat_arr
+        arr_raw = cf.get("arr")
+        planhat_arr = cf.get("planhat_arr")
+        arr_val = None
+        if arr_raw is not None:
+            try:
+                arr_val = float(str(arr_raw).replace(",", "").strip())
+            except (ValueError, TypeError):
+                pass
+        if arr_val is None and planhat_arr is not None:
+            try:
+                arr_val = float(planhat_arr)
+            except (ValueError, TypeError):
+                pass
+
+        result = {
+            "company_id":   str(company_id),
+            "company_name": data.get("name"),
+            "arr":          arr_val,
+            "planhat_phase":        cf.get("planhat_phase"),
+            "planhat_health":       cf.get("planhat_health"),
+            "planhat_segmentation": cf.get("planhat_customer_segmentation"),
+        }
+        _company_cache[company_id] = result
+        return result
+
+    except Exception as e:
+        logger.warning(f"Company fetch failed for #{company_id}: {e}")
+        _company_cache[company_id] = {}
+        return {}
 
 
 async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List[Dict]:

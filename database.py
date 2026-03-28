@@ -67,26 +67,43 @@ async def init_db():
         await conn.run_sync(ModelBase.metadata.create_all)
 
         # 2. Ensure 003_cx_fields columns exist (idempotent — IF NOT EXISTS)
-        new_cols = [
+        cx_cols = [
             "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS churn_confirmed  BOOLEAN NOT NULL DEFAULT false",
             "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS msg_count        INTEGER",
             "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS cx_bad           BOOLEAN NOT NULL DEFAULT false",
             "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS cx_signals       TEXT[]",
         ]
-        for ddl in new_cols:
+        for ddl in cx_cols:
             try:
                 await conn.execute(text(ddl))
             except Exception as e:
                 logger.warning(f"Column DDL skipped (may already exist): {e}")
 
-        # 3. Ensure supporting index exists
-        try:
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_evals_user_cx_bad "
-                "ON evaluations (user_id, cx_bad)"
-            ))
-        except Exception as e:
-            logger.warning(f"Index creation skipped: {e}")
+        # 3. Ensure 004_arr_company columns exist (idempotent — IF NOT EXISTS)
+        arr_cols = [
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS company_id           VARCHAR",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS company_name         VARCHAR",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS arr                  NUMERIC(12,2)",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS planhat_phase        VARCHAR",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS planhat_health       INTEGER",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS planhat_segmentation VARCHAR",
+        ]
+        for ddl in arr_cols:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:
+                logger.warning(f"Column DDL skipped (may already exist): {e}")
+
+        # 4. Ensure supporting indexes exist
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS ix_evals_user_cx_bad ON evaluations (user_id, cx_bad)",
+            "CREATE INDEX IF NOT EXISTS ix_tickets_user_churn_arr ON tickets (user_id, company_id)",
+        ]
+        for idx in indexes:
+            try:
+                await conn.execute(text(idx))
+            except Exception as e:
+                logger.warning(f"Index creation skipped: {e}")
 
     logger.info("DB tables and columns verified/created")
 

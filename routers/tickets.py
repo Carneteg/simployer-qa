@@ -34,9 +34,16 @@ class TicketOut(BaseModel):
     strengths: Optional[List[str]]
     improvements: Optional[List[str]]
     # CX proxy fields
-    msg_count: Optional[int] = None    # total messages in thread
-    cx_bad: bool = False               # bad CX = contact_problem OR high_msgs OR churn_flag
-    cx_signals: Optional[List[str]] = None  # which signals fired
+    msg_count: Optional[int] = None
+    cx_bad: bool = False
+    cx_signals: Optional[List[str]] = None
+    # Company / ARR fields
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
+    arr: Optional[float] = None
+    planhat_phase: Optional[str] = None
+    planhat_health: Optional[int] = None
+    planhat_segmentation: Optional[str] = None
 
 
 @router.get("/", response_model=List[TicketOut])
@@ -73,6 +80,12 @@ async def list_tickets(
             Evaluation.cx_bad,
             Evaluation.cx_signals,
             Evaluation.churn_confirmed,
+            Ticket.company_id,
+            Ticket.company_name,
+            Ticket.arr,
+            Ticket.planhat_phase,
+            Ticket.planhat_health,
+            Ticket.planhat_segmentation,
         )
         .join(Evaluation, and_(
             Evaluation.ticket_id == Ticket.id,
@@ -117,6 +130,12 @@ async def list_tickets(
             cx_bad=bool(r["cx_bad"]) if r["cx_bad"] is not None else False,
             cx_signals=r["cx_signals"] or [],
             churn_confirmed=bool(r["churn_confirmed"]) if r.get("churn_confirmed") is not None else False,
+            company_id=r.get("company_id"),
+            company_name=r.get("company_name"),
+            arr=float(r["arr"]) if r.get("arr") is not None else None,
+            planhat_phase=r.get("planhat_phase"),
+            planhat_health=r.get("planhat_health"),
+            planhat_segmentation=r.get("planhat_segmentation"),
         )
         for r in rows
     ]

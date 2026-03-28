@@ -32,7 +32,7 @@ from database import AsyncSessionLocal
 from models import Run, Ticket, Message, Evaluation
 from services.freshdesk import (
     fetch_all_tickets, fetch_conversations,
-    build_thread, detect_churn, is_confirmed_churn,
+    build_thread, detect_churn, is_confirmed_churn, fetch_company,
 )
 from services.claude import eval_ticket
 
@@ -98,9 +98,11 @@ async def _process_ticket(
             churn_kw        = detect_churn(thread)
             churn_confirmed = is_confirmed_churn(ticket)
 
+            # Fetch company ARR (cached per company_id — cheap after first call)
+            raw_company_id = ticket.get("company_id")
+            company_data   = await fetch_company(raw_company_id) if raw_company_id else {}
+
             # CX proxy — computed from thread length before Claude call
-            # Stored on the evaluation so the dashboard can query it directly
-            # without fetching messages per ticket on every load.
             _msg_count = len(thread)
 
             created_at  = _dt(ticket.get("created_at"))
@@ -129,6 +131,13 @@ async def _process_ticket(
                     created_at=created_at,
                     resolved_at=resolved_at,
                     updated_at=updated_at,
+                    # Company / ARR fields
+                    company_id=company_data.get("company_id") or (str(raw_company_id) if raw_company_id else None),
+                    company_name=company_data.get("company_name"),
+                    arr=company_data.get("arr"),
+                    planhat_phase=company_data.get("planhat_phase"),
+                    planhat_health=company_data.get("planhat_health"),
+                    planhat_segmentation=company_data.get("planhat_segmentation"),
                 ).on_conflict_do_update(
                     index_elements=["id", "user_id"],
                     set_={
@@ -138,6 +147,13 @@ async def _process_ticket(
                             (ticket.get("responder") or {}).get("name")
                         ),
                         "updated_at": updated_at,
+                        # Always refresh company data in case ARR changed
+                        "company_id":   company_data.get("company_id") or (str(raw_company_id) if raw_company_id else None),
+                        "company_name": company_data.get("company_name"),
+                        "arr":          company_data.get("arr"),
+                        "planhat_phase":         company_data.get("planhat_phase"),
+                        "planhat_health":        company_data.get("planhat_health"),
+                        "planhat_segmentation":  company_data.get("planhat_segmentation"),
                     }
                 )
                 await db.execute(stmt)
