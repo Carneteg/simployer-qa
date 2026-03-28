@@ -13,8 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from config import settings
-from database import init_db
-from routers import auth, runs, tickets, agents, export, scorecard, agent_scorecard
+from database import init_db, get_pool_status
+from routers import auth, runs, tickets, agents, export, scorecard, agent_scorecard, debug
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,7 +73,12 @@ app.include_router(export.router,  prefix="/export",  tags=["export"])
 # ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["ops"])
 async def health():
-    return {"status": "ok", "environment": settings.environment}
+    pool = await get_pool_status()
+    return {
+        "status": "ok",
+        "environment": settings.environment,
+        "db_pool": pool,
+    }
 
 
 # ── WebSocket: live run progress ──────────────────────────────────────────────
