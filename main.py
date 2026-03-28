@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 
 from config import settings
 from database import init_db, get_pool_status
-from routers import auth, runs, tickets, agents, export, scorecard, agent_scorecard, debug, categories, qa_summary, improvements
+from routers import auth, runs, tickets, agents, export, scorecard, agent_scorecard, debug, categories, qa_summary, improvements, full_analysis
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,6 +110,7 @@ app.include_router(debug.router,         prefix="/debug",         tags=["debug"]
 app.include_router(categories.router,    prefix="/categories",    tags=["categories"])
 app.include_router(qa_summary.router,    prefix="/qa-summary",    tags=["qa-summary"])
 app.include_router(improvements.router,  prefix="/improvements",  tags=["improvements"])
+app.include_router(full_analysis.router, prefix="/full-analysis", tags=["full-analysis"])
 
 
 # ── Health check ─────────────────────────────────────────────────────────────

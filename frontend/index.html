@@ -174,6 +174,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('cat')">Categories</div>
   <div class="tab" onclick="showTab('qas')">QA Summary</div>
   <div class="tab" onclick="showTab('imp')">Improvements</div>
+  <div class="tab" onclick="showTab('fqa')">Full Analysis</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -786,7 +787,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -806,7 +807,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -815,6 +816,7 @@ function showTab(id) {
   if (id === 'cat')  renderCat();
   if (id === 'qas')  renderQaS();
   if (id === 'imp')  renderImp();
+  if (id === 'fqa')  fqaInit();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -2378,6 +2380,375 @@ function _renderImp(d) {
 
   // ── Leadership commentary ──────────────────────────────────────────────────
   document.getElementById('imp-commentary').textContent = d.leadership_commentary || '';
+}
+
+<!-- FULL QA ANALYSIS -->
+<div class="tab-content" id="tab-fqa">
+  <div style="max-width:920px;margin:0 auto">
+
+    <!-- Controls -->
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:16px">
+      <div>
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Ticket ID</label>
+        <input id="fqa-tid" type="text" placeholder="e.g. 63511"
+          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none"
+          onkeydown="if(event.key==='Enter')runFqa()"/>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Run (optional)</label>
+        <select id="fqa-run"
+          style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;height:38px">
+          <option value="">All runs</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="runFqa()" id="fqa-btn" style="height:38px;margin:0">
+        ✦ Run Full Analysis
+      </button>
+    </div>
+
+    <!-- Shortcut: launch from ticket modal -->
+    <div style="font-size:11px;color:var(--dim);margin-bottom:14px">
+      Or click any ticket → <strong>Full Analysis</strong> button in the ticket detail.
+    </div>
+
+    <!-- Loading -->
+    <div id="fqa-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is running the full QA engine — ticket scorecard, agent scorecard, summary, improvements…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 15–25 seconds</div>
+    </div>
+
+    <!-- Error -->
+    <div id="fqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty -->
+    <div id="fqa-empty" style="padding:48px;text-align:center;color:var(--dim)">
+      <div style="font-size:42px;margin-bottom:14px">🔬</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">Full QA Analysis</div>
+      <div style="font-size:13px;line-height:1.8;max-width:500px;margin:0 auto">
+        Enter a Ticket ID to produce a combined analysis covering all 4 sections:<br>
+        <strong>Ticket scorecard · Agent scorecard · Team summary · Improvement plan</strong><br>
+        plus STOP/START/CONTINUE and a Final Leadership Comment.
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div id="fqa-result" style="display:none">
+
+      <!-- Header strip -->
+      <div id="fqa-header" style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"></div>
+
+      <!-- ── Section 1: Ticket Scorecard ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">1. Ticket QA Scorecard</span>
+          <span id="fqa-t-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
+              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Evidence from this ticket</th>
+            </tr></thead>
+            <tbody id="fqa-t-tbody"></tbody>
+          </table>
+        </div>
+        <div id="fqa-t-sw" style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid var(--bdr)"></div>
+      </div>
+
+      <!-- ── Section 2: Agent Scorecard ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">2. Agent QA Scorecard</span>
+          <span id="fqa-a-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
+              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pattern across tickets</th>
+            </tr></thead>
+            <tbody id="fqa-a-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Section 3: Summary ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">3. Summary</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody id="fqa-sum-tbody"></tbody>
+        </table>
+        <div style="padding:12px 14px;border-top:1px solid var(--bdr)">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Executive Bullets</div>
+          <ul id="fqa-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
+        </div>
+      </div>
+
+      <!-- ── Section 4: Improvements + SSC ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">4. Improvements</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:70px">Priority</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:130px">Area</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:65px">Effort</th>
+            </tr></thead>
+            <tbody id="fqa-imp-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SSC -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="fqa-ssc"></div>
+
+      <!-- Leadership Comment -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Final Leadership Comment</div>
+        <p id="fqa-leadership" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Re-run -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        <span style="cursor:pointer;text-decoration:underline" onclick="runFqa()">Run again with same ticket</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+// ═══════════════════════════════════════════════════════════
+// FULL QA ANALYSIS
+// ═══════════════════════════════════════════════════════════
+const FQA_TICKET_LABELS = {
+  understanding:'Understanding', accuracy:'Accuracy',
+  completeness:'Completeness', clarity:'Clarity', tone:'Tone',
+  efficiency:'Efficiency', ownership:'Ownership', proactivity:'Proactivity',
+  customer_confidence:'Customer Confidence', repeat_contact_risk:'Repeat Contact Risk',
+};
+const FQA_AGENT_LABELS = {
+  consistency:'Consistency', product_knowledge:'Product Knowledge',
+  communication:'Communication', tone:'Tone', ownership:'Ownership',
+  efficiency:'Efficiency', problem_solving:'Problem-Solving',
+  repeat_prevention:'Repeat Prevention', trust_building:'Trust Building',
+  maturity:'Maturity',
+};
+const FQA_SUM_LABELS = {
+  quality:'Quality', strengths:'Strengths', weaknesses:'Weaknesses',
+  customer_risk:'Customer Risk', operational_risk:'Operational Risk',
+  coaching_need:'Coaching Need', next_step:'Next Step',
+};
+const FQA_SUM_HIGHLIGHT = {customer_risk:'rgba(248,113,113,.05)',operational_risk:'rgba(248,113,113,.05)',coaching_need:'rgba(251,191,36,.05)',next_step:'rgba(91,106,240,.05)'};
+const scoreColor = s => s>=4?'var(--ok)':s>=3?'var(--warn)':'var(--danger)';
+const scoreBg    = s => s>=4?'rgba(52,211,153,.15)':s>=3?'rgba(251,191,36,.15)':'rgba(248,113,113,.15)';
+
+function fqaInit() {
+  // Populate run dropdown
+  if (window._token) {
+    fetch(API+'/runs/',{headers:{'Authorization':'Bearer '+_token}})
+      .then(r=>r.json()).then(runs=>{
+        const sel=document.getElementById('fqa-run');
+        if (!sel) return;
+        sel.innerHTML='<option value="">All runs</option>'+
+          (runs||[]).filter(r=>r.status==='done').map(r=>
+            `<option value="${r.id}">Run ${r.id.slice(0,8)} (${r.created_at?.slice(0,10)})</option>`
+          ).join('');
+      }).catch(()=>{});
+  }
+}
+
+// Allow launch from ticket modal via launchFqa(ticketId)
+function launchFqa(ticketId) {
+  showTab('fqa');
+  const input = document.getElementById('fqa-tid');
+  if (input) { input.value = ticketId; setTimeout(runFqa, 150); }
+}
+
+async function runFqa() {
+  const tid    = document.getElementById('fqa-tid')?.value?.trim();
+  const runId  = document.getElementById('fqa-run')?.value || null;
+  if (!tid) { document.getElementById('fqa-tid')?.focus(); return; }
+
+  document.getElementById('fqa-empty').style.display   = 'none';
+  document.getElementById('fqa-result').style.display  = 'none';
+  document.getElementById('fqa-error').style.display   = 'none';
+  document.getElementById('fqa-loading').style.display = 'block';
+  document.getElementById('fqa-btn').disabled = true;
+  document.getElementById('fqa-btn').innerHTML = '<div class="sp"></div> Analysing…';
+
+  try {
+    const d = await apiFetch('/full-analysis/', {
+      method:'POST', body:JSON.stringify({ticket_id:tid, run_id:runId||null})
+    });
+    if (!d) throw new Error('Empty response');
+    if (d.detail) throw new Error(d.detail);
+    _renderFqa(d);
+  } catch(err) {
+    document.getElementById('fqa-loading').style.display = 'none';
+    document.getElementById('fqa-error').style.display   = 'block';
+    document.getElementById('fqa-error').textContent     = 'Error: '+err.message;
+    document.getElementById('fqa-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('fqa-btn').disabled  = false;
+    document.getElementById('fqa-btn').innerHTML = '✦ Run Full Analysis';
+  }
+}
+
+function _renderFqa(d) {
+  document.getElementById('fqa-loading').style.display = 'none';
+  document.getElementById('fqa-empty').style.display   = 'none';
+  document.getElementById('fqa-error').style.display   = 'none';
+  document.getElementById('fqa-result').style.display  = 'block';
+
+  const meta = d.meta || {};
+  const PL_COLOR = {High:'var(--ok)',Good:'var(--ok)',Mixed:'var(--warn)',Risk:'var(--danger)',Critical:'var(--danger)'};
+  const PC_COLOR = {Low:'var(--ok)',Medium:'var(--warn)',High:'var(--danger)'};
+
+  // Header
+  const ts = d.ticket_scorecard || {};
+  const as = d.agent_scorecard  || {};
+  const pl = as.performance_level || '—';
+  const cp = as.coaching_priority  || '—';
+  document.getElementById('fqa-header').innerHTML = `
+    <div>
+      <div style="font-family:var(--disp);font-size:15px;font-weight:800">
+        Full Analysis — Ticket #${meta.ticket_id} · ${meta.agent_name}
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:3px">
+        ${meta.agent_tickets} agent tickets analysed · team avg ${meta.team_avg_score}/100 ·
+        ${new Date().toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit'})}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="text-align:center;min-width:60px">
+        <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:${scoreColor(ts.average_score/20||0)}">${ts.average_score||'—'}<span style="font-size:11px;color:var(--dim)">/5</span></div>
+        <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Ticket</div>
+      </div>
+      <div style="text-align:center;min-width:60px">
+        <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:${scoreColor(as.overall_score||0)}">${as.overall_score||'—'}<span style="font-size:11px;color:var(--dim)">/5</span></div>
+        <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Agent</div>
+      </div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-family:var(--mono);font-size:13px;font-weight:800;color:${PL_COLOR[pl]||'var(--txt)'}">${pl}</div>
+        <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Level</div>
+      </div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-family:var(--mono);font-size:13px;font-weight:800;color:${PC_COLOR[cp]||'var(--txt)'}">${cp}</div>
+        <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Coaching</div>
+      </div>
+    </div>`;
+
+  // ── Section 1: Ticket scorecard ────────────────────────────────────────────
+  const tCats = ts.categories || {};
+  document.getElementById('fqa-t-score').innerHTML =
+    `<span style="color:${scoreColor(ts.average_score/20||0)}">${ts.average_score||'—'}/5</span>`+
+    (ts.verdict ? ` <span style="font-size:11px;color:var(--dim)">· ${ts.verdict}</span>` : '');
+
+  document.getElementById('fqa-t-tbody').innerHTML =
+    Object.entries(tCats).map(([key, v]) => `
+      <tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:8px 12px;font-size:12px;white-space:nowrap">${FQA_TICKET_LABELS[key]||key}</td>
+        <td style="padding:8px 12px;text-align:center">
+          <span style="display:inline-block;padding:2px 9px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
+        </td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--dim);line-height:1.5">${v.evidence||'—'}</td>
+      </tr>`).join('');
+
+  // Strengths/weaknesses
+  const str3  = (ts.strengths||[]).filter(Boolean);
+  const wk3   = (ts.weaknesses||[]).filter(Boolean);
+  document.getElementById('fqa-t-sw').innerHTML = `
+    <div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px 12px">
+      <div style="font-size:10px;color:var(--ok);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✓ Strengths</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">${str3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+    </div>
+    <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 12px">
+      <div style="font-size:10px;color:var(--danger);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✕ Weaknesses</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">${wk3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+    </div>`;
+
+  // ── Section 2: Agent scorecard ─────────────────────────────────────────────
+  const aCats = as.categories || {};
+  document.getElementById('fqa-a-score').innerHTML =
+    `<span style="color:${scoreColor(as.overall_score||0)}">${as.overall_score||'—'}/5</span> `+
+    `<span style="font-size:11px;color:${PL_COLOR[pl]||'var(--txt)'}">· ${pl}</span> `+
+    `<span style="font-size:11px;color:${PC_COLOR[cp]||'var(--txt)'}">· Coaching: ${cp}</span>`;
+
+  document.getElementById('fqa-a-tbody').innerHTML =
+    Object.entries(aCats).map(([key, v]) => `
+      <tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:8px 12px;font-size:12px;white-space:nowrap">${FQA_AGENT_LABELS[key]||key}</td>
+        <td style="padding:8px 12px;text-align:center">
+          <span style="display:inline-block;padding:2px 9px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
+        </td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--dim);line-height:1.5">${v.pattern||'—'}</td>
+      </tr>`).join('');
+
+  // ── Section 3: Summary ─────────────────────────────────────────────────────
+  const sum = d.summary || {};
+  document.getElementById('fqa-sum-tbody').innerHTML =
+    Object.entries(FQA_SUM_LABELS).map(([key,label]) => `
+      <tr style="border-bottom:1px solid var(--bdr);background:${FQA_SUM_HIGHLIGHT[key]||'transparent'}">
+        <td style="padding:10px 14px;font-size:11px;font-weight:700;font-family:var(--mono);color:var(--dim);white-space:nowrap;vertical-align:top;width:150px;text-transform:uppercase;letter-spacing:.05em">${label}</td>
+        <td style="padding:10px 14px;font-size:13px;line-height:1.7">${sum[key]||'—'}</td>
+      </tr>`).join('');
+
+  document.getElementById('fqa-exec').innerHTML =
+    (sum.executive_bullets||[]).filter(Boolean).map(b=>
+      `<li style="font-size:13px;line-height:1.7;margin-bottom:4px">${b}</li>`
+    ).join('');
+
+  // ── Section 4: Improvements ────────────────────────────────────────────────
+  const PRI = {High:{bg:'rgba(248,113,113,.12)',color:'var(--danger)',label:'🔴 High'},
+               Medium:{bg:'rgba(251,191,36,.12)',color:'var(--warn)',label:'🟠 Medium'},
+               Low:{bg:'rgba(107,107,138,.15)',color:'var(--dim)',label:'🟡 Low'}};
+  const EFFORT_C = {Low:'var(--ok)',Medium:'var(--warn)',High:'var(--danger)'};
+
+  document.getElementById('fqa-imp-tbody').innerHTML =
+    (d.improvements||[]).map(row => {
+      const p = PRI[row.priority]||PRI.Low;
+      return `<tr style="border-bottom:1px solid var(--bdr);background:${row.priority==='High'?'rgba(248,113,113,.03)':'transparent'}">
+        <td style="padding:9px 10px;text-align:center">
+          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${p.bg};color:${p.color};white-space:nowrap">${p.label}</span>
+        </td>
+        <td style="padding:9px 10px;font-size:12px;font-weight:600">${row.area||'—'}</td>
+        <td style="padding:9px 10px;font-size:12px;line-height:1.6">${row.change||row.what_should_change||'—'}</td>
+        <td style="padding:9px 10px;font-size:11px;color:var(--dim);font-style:italic;line-height:1.5">${row.evidence||'—'}</td>
+        <td style="padding:9px 10px;text-align:center">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${EFFORT_C[row.effort]||'var(--dim)'}">${row.effort||'—'}</span>
+        </td>
+      </tr>`;
+    }).join('');
+
+  // SSC
+  document.getElementById('fqa-ssc').innerHTML = [
+    {label:'🛑 STOP', sub:'Based on observed behavior', bg:'rgba(248,113,113,.07)',border:'rgba(248,113,113,.3)',color:'var(--danger)', items:d.stop||[]},
+    {label:'▶ START', sub:'Based on gaps',             bg:'rgba(52,211,153,.06)', border:'rgba(52,211,153,.3)', color:'var(--ok)',     items:d.start||[]},
+    {label:'🔄 CONTINUE',sub:'Based on strengths',     bg:'rgba(91,106,240,.06)',  border:'rgba(91,106,240,.3)', color:'var(--ac2)',   items:d.continue_doing||[]},
+  ].map(s=>`
+    <div style="background:${s.bg};border:1px solid ${s.border};border-radius:10px;padding:14px">
+      <div style="font-family:var(--mono);font-size:11px;font-weight:800;color:${s.color};margin-bottom:2px">${s.label}</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;font-style:italic">${s.sub}</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">
+        ${s.items.filter(Boolean).map(i=>`<li style="font-size:12px;margin-bottom:2px">${i}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+
+  // Leadership comment
+  document.getElementById('fqa-leadership').textContent = d.leadership_comment || '';
+
+  // Scroll to result
+  document.getElementById('fqa-result').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 </script>
