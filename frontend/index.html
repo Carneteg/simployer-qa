@@ -121,6 +121,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('exp')">Export</div>
   <div class="tab" onclick="showTab('score')">Manual Review</div>
   <div class="tab" onclick="showTab('agrev')">Agent Review</div>
+  <div class="tab" onclick="showTab('cat')">Categories</div>
 </div>
 
 <!-- OVERVIEW -->
@@ -445,11 +446,12 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   if (id === 'runs') loadRunHistory();
   if (id === 'exp')  loadRunsForExport();
+  if (id === 'cat')  renderCat();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -1261,6 +1263,185 @@ function renderAgentScorecard(d) {
   el.style.display = 'block';
   el.scrollIntoView({behavior:'smooth', block:'start'});
 }
+
+<!-- CATEGORIES -->
+<div class="tab-content" id="tab-cat">
+  <div style="max-width:900px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <button class="btn btn-primary btn-sm" id="cat-btn-tags"
+          onclick="setCatView('tags')" style="margin-right:6px">By Tag</button>
+        <button class="btn btn-outline btn-sm" id="cat-btn-groups"
+          onclick="setCatView('groups')">By Group</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="cat-meta">—</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="cat-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="text-align:left;border-bottom:2px solid var(--bdr)">
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;min-width:160px">Category</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Volume</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Flags</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Risk %</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:center">Risk Level</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">ARR at Risk</th>
+          </tr>
+        </thead>
+        <tbody id="cat-tbody">
+          <tr><td colspan="6" style="padding:24px;text-align:center;color:var(--dim)">Select Categories tab to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="cat-top5" style="margin-top:18px"></div>
+    <details style="margin-top:18px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+      <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+        <span>&#x2139;&#xFE0F;</span> How is this measured?
+        <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+      </summary>
+      <div style="padding:14px;font-size:12px;line-height:1.8;color:var(--dim)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Data source</div>
+            <p style="margin:0 0 8px">Aggregates all evaluated tickets for the current loaded dataset. Tags come from Freshdesk ticket fields. Each ticket may carry multiple tags and is counted once per tag. Minimum 5 tickets per tag to be included.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Volume</div>
+            <p style="margin:0 0 8px">Distinct tickets with this tag that have a QA evaluation. Tags below 5 tickets are excluded as statistically unreliable.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Churn Risk %</div>
+            <p style="margin:0 0 8px">Churn-flagged tickets / total tickets in this category x 100. Three-tier churn detection: Salesforce CRM tag (confirmed termination) &gt; Claude AI inference (explicit cancellation intent) &gt; specific keyword + QA score &lt;70. Team baseline: 18.6%.</p>
+          </div>
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Risk Level thresholds</div>
+            <ul style="margin:0 0 8px;padding-left:16px">
+              <li><strong>High</strong> &#8212; churn rate &ge;30%</li>
+              <li><strong>Med</strong> &#8212; churn rate 15&ndash;29.9%</li>
+              <li><strong>Low</strong> &#8212; churn rate &lt;15%</li>
+            </ul>
+            <p style="margin:0 0 8px">Absolute thresholds, not relative to the team baseline. Always read volume and rate together &#8212; a low-volume category with a 90% rate may have only 5 tickets.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">ARR at Risk</div>
+            <p style="margin:0 0 8px">Sum of ARR for companies with churn-flagged tickets in this category, counted once per unique company. ARR is fetched from the Freshdesk company record at evaluation time. Shows [ARR unknown] when no ARR data was available for churn tickets in this category.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Top 5</div>
+            <p style="margin:0">The 5 rows with the highest churn rate are highlighted with a left-border accent. Note that the highest churn rate is not always the highest business risk &#8212; also consider volume and ARR.</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORIES
+// ═══════════════════════════════════════════════════════════
+let _catView  = 'tags';  // 'tags' | 'groups'
+let _catCache = {};      // simple in-memory cache per view
+
+function setCatView(view) {
+  _catView = view;
+  document.getElementById('cat-btn-tags').className   = view === 'tags'   ? 'btn btn-primary btn-sm'  : 'btn btn-outline btn-sm';
+  document.getElementById('cat-btn-groups').className = view === 'groups' ? 'btn btn-primary btn-sm'  : 'btn btn-outline btn-sm';
+  renderCat();
+}
+
+async function renderCat() {
+  if (_catCache[_catView]) { _renderCatRows(_catCache[_catView]); return; }
+
+  document.getElementById('cat-tbody').innerHTML =
+    '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--dim)">Loading…</td></tr>';
+  document.getElementById('cat-top5').innerHTML = '';
+
+  try {
+    const url = _catView === 'tags' ? '/categories/' : '/categories/groups';
+    const data = await apiFetch(url);
+    if (!data) return;
+
+    const rows = _catView === 'tags' ? (data.categories || []) : (data.groups || []);
+    const minTickets = data.min_tickets || 5;
+    _catCache[_catView] = { rows, minTickets };
+    _renderCatRows({ rows, minTickets });
+  } catch(err) {
+    document.getElementById('cat-tbody').innerHTML =
+      `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--danger)">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+function _renderCatRows({ rows, minTickets }) {
+  const RISK_COLOR = { High: 'var(--danger)', Med: '#f97316', Low: 'var(--ok)' };
+  const RISK_BADGE = {
+    High: `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.15);color:var(--danger)">High</span>`,
+    Med:  `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(249,115,22,.15);color:#f97316">Med</span>`,
+    Low:  `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(52,211,153,.15);color:var(--ok)">Low</span>`,
+  };
+
+  // Update meta
+  const totalVol = rows.reduce((s, r) => s + r.volume, 0);
+  const totalChurn = rows.reduce((s, r) => s + r.churn_count, 0);
+  document.getElementById('cat-meta').textContent =
+    `${rows.length} categories · ${totalVol} tickets · ${totalChurn} churn flags · min ${minTickets} tickets/category`;
+
+  // Table rows
+  const tbody = document.getElementById('cat-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--dim)">No categories found with sufficient data.</td></tr>';
+    document.getElementById('cat-top5').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const isTop5   = i < 5;
+    const topStyle = isTop5 ? 'border-left:3px solid var(--danger);background:rgba(248,113,113,.04)' : 'border-left:3px solid transparent';
+    const arrCell  = r.arr_at_risk !== null && r.arr_at_risk !== undefined
+      ? `<span style="font-family:var(--mono)">${'NOK ' + r.arr_at_risk.toLocaleString('nb-NO', {maximumFractionDigits:0})}</span>`
+      + (r.companies_at_risk > 0 ? `<br><span style="font-size:10px;color:var(--dim)">${r.companies_at_risk} co.</span>` : '')
+      : `<span style="color:var(--dim);font-style:italic">[ARR unknown]</span>`;
+
+    // Bar width for churn pct (cap at 100%)
+    const barW = Math.min(r.churn_pct, 100);
+    const barColor = r.risk_level === 'High' ? 'var(--danger)' : r.risk_level === 'Med' ? '#f97316' : 'var(--ok)';
+
+    return `<tr style="${topStyle}">
+      <td style="padding:10px 10px;font-weight:${isTop5 ? '600' : '400'}">
+        ${isTop5 ? '&#x25B6; ' : ''}<code style="font-size:11px;background:var(--s2);padding:1px 5px;border-radius:4px;font-family:var(--mono)">${r.category}</code>
+      </td>
+      <td style="padding:10px;text-align:right;font-family:var(--mono)">${r.volume}</td>
+      <td style="padding:10px;text-align:right;font-family:var(--mono);color:${r.churn_count > 0 ? 'var(--danger)' : 'var(--dim)'}">${r.churn_count}</td>
+      <td style="padding:10px;text-align:right">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+          <div style="width:60px;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden">
+            <div style="width:${barW}%;height:100%;background:${barColor};border-radius:3px"></div>
+          </div>
+          <span style="font-family:var(--mono);font-weight:600;color:${RISK_COLOR[r.risk_level]}">${r.churn_pct}%</span>
+        </div>
+      </td>
+      <td style="padding:10px;text-align:center">${RISK_BADGE[r.risk_level] || r.risk_level}</td>
+      <td style="padding:10px;text-align:right;font-size:12px">${arrCell}</td>
+    </tr>`;
+  }).join('');
+
+  // Top 5 callout card
+  const top5 = rows.slice(0, 5);
+  const arrKnown = top5.filter(r => r.arr_at_risk !== null && r.arr_at_risk > 0);
+  const totalTopArr = arrKnown.reduce((s, r) => s + r.arr_at_risk, 0);
+
+  document.getElementById('cat-top5').innerHTML = `
+    <div class="card" style="border-left:4px solid var(--danger)">
+      <div style="font-family:var(--disp);font-size:13px;font-weight:700;margin-bottom:10px">
+        &#x26A0;&#xFE0F; Top 5 categories by churn rate
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${top5.map((r, i) => `
+          <div style="background:var(--s2);border-radius:8px;padding:8px 12px;min-width:140px">
+            <div style="font-size:10px;color:var(--dim);margin-bottom:2px">#${i + 1}</div>
+            <div style="font-family:var(--mono);font-size:11px;font-weight:700">${r.category}</div>
+            <div style="font-size:13px;font-weight:800;color:${RISK_COLOR[r.risk_level]};margin-top:2px">${r.churn_pct}%</div>
+            <div style="font-size:10px;color:var(--dim)">${r.volume} tickets</div>
+            <div style="font-size:10px;color:${r.arr_at_risk ? 'var(--warn)' : 'var(--dim)'}">
+              ${r.arr_at_risk ? 'NOK ' + r.arr_at_risk.toLocaleString('nb-NO', {maximumFractionDigits:0}) : '[ARR unknown]'}
+            </div>
+          </div>`).join('')}
+      </div>
+      ${totalTopArr > 0 ? `<div style="margin-top:10px;font-size:12px;color:var(--dim)">Combined ARR at risk in top 5: <strong style="color:var(--warn)">NOK ${totalTopArr.toLocaleString('nb-NO', {maximumFractionDigits:0})}</strong> (${arrKnown.length}/${top5.length} categories have ARR data)</div>` : ''}
+    </div>`;
+}
+
 
 </script>
 </body>
