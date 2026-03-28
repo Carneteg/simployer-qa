@@ -193,7 +193,12 @@ async def _process_ticket(
             elapsed = time.monotonic() - t0
             counters["done"]    += 1
             counters["timings"].append(elapsed)
-            if ev.get("churn_risk_flag") or churn_kw:
+            # Use same dual-signal logic as the DB write above
+            _churn_flagged = bool(
+                ev.get("churn_risk_flag") or
+                (churn_kw and (ev.get("total_score") or 100) < 70)
+            )
+            if _churn_flagged:
                 counters["churn"] += 1
 
             logger.debug(
