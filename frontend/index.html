@@ -1914,7 +1914,19 @@ async function showTicket(tid) {
       <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Coaching Tip</strong>
       <div style="margin-top:5px;padding:9px 13px;background:var(--bg);border-left:3px solid var(--ac);border-radius:4px;font-size:13px;line-height:1.7">${e.coaching_tip||''}</div>
     </div>
-    ${thread}`;
+    ${thread}
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--bdr);display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline btn-sm"
+        onclick="closeModal();showTab('score');setTimeout(()=>{scInit();document.getElementById('sc-search').value='${tid}';FilterBar.onInput&&FilterBar.onInput();scSelect('${tid}')},300)"
+        style="flex:1;justify-content:center">
+        📋 Manual Scorecard
+      </button>
+      <button class="btn btn-primary btn-sm"
+        onclick="closeModal();launchFqa('${tid}')"
+        style="flex:1;justify-content:center">
+        🔬 Full Analysis
+      </button>
+    </div>\`;
   document.getElementById('modal').classList.add('open');
 }
 
