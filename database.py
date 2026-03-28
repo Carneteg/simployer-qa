@@ -62,10 +62,10 @@ async def init_db():
 async def get_pool_status() -> dict:
     """Return current connection pool metrics for monitoring."""
     pool = engine.pool
-    return {
-        "pool_size":    pool.size(),
-        "checked_in":  pool.checkedin(),
-        "checked_out": pool.checkedout(),
-        "overflow":    pool.overflow(),
-        "invalid":     pool.invalid(),
+    stats = {
+        "pool_size":   pool.size() if hasattr(pool, "size") else None,
+        "checked_in":  pool.checkedin() if hasattr(pool, "checkedin") else None,
+        "checked_out": pool.checkedout() if hasattr(pool, "checkedout") else None,
+        "overflow":    pool.overflow() if hasattr(pool, "overflow") else None,
     }
+    return {k: v for k, v in stats.items() if v is not None}
