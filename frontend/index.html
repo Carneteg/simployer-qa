@@ -1195,7 +1195,7 @@ async function showAgent(name) {
         <!-- Scorecard CTA -->
         <div style="margin-bottom:12px">
           <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center"
-            onclick="launchAgentScorecard('${data.agent_name.replace(/'/g,&quot;\'&quot;)}')">
+            onclick="launchAgentScorecard('${data.agent_name.replace(/['\']/g, '')}')" >
             ✦ Generate Full Scorecard — pattern analysis across all tickets
           </button>
         </div>
