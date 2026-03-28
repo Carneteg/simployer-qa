@@ -52,11 +52,43 @@ async def get_db():
 
 
 async def init_db():
-    """Create all tables if they don't exist (safe to run on every startup)."""
+    """
+    Create all tables + ensure new columns exist (safe to run on every startup).
+
+    SQLAlchemy create_all only creates missing TABLES, not missing COLUMNS on
+    existing tables. For column additions we use ADD COLUMN IF NOT EXISTS so this
+    is fully idempotent — safe to run on every boot regardless of current DB state.
+    """
     from models import Base as ModelBase
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
+        # 1. Create any missing tables
         await conn.run_sync(ModelBase.metadata.create_all)
-    logger.info("DB tables verified/created")
+
+        # 2. Ensure 003_cx_fields columns exist (idempotent — IF NOT EXISTS)
+        new_cols = [
+            "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS churn_confirmed  BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS msg_count        INTEGER",
+            "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS cx_bad           BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS cx_signals       TEXT[]",
+        ]
+        for ddl in new_cols:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:
+                logger.warning(f"Column DDL skipped (may already exist): {e}")
+
+        # 3. Ensure supporting index exists
+        try:
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_evals_user_cx_bad "
+                "ON evaluations (user_id, cx_bad)"
+            ))
+        except Exception as e:
+            logger.warning(f"Index creation skipped: {e}")
+
+    logger.info("DB tables and columns verified/created")
 
 
 async def get_pool_status() -> dict:
