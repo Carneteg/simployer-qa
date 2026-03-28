@@ -85,6 +85,56 @@ tbody td{padding:7px 9px;vertical-align:top}
 .rs-queued{background:rgba(107,107,138,.2);color:var(--dim)}
 .rs-failed{background:rgba(248,113,113,.15);color:var(--danger)}
 @media(max-width:700px){.sg,.fr,.tc{grid-template-columns:1fr}}
+
+/* ─── Skeleton loading ─────────────────────────────────────────────────── */
+@keyframes shimmer{from{background-position:-400% 0}to{background-position:400% 0}}
+.skel{background:linear-gradient(90deg,var(--s2) 25%,var(--bdr) 50%,var(--s2) 75%);background-size:400% 100%;animation:shimmer 1.8s ease infinite;border-radius:6px;display:block}
+/* ─── Filter bar ───────────────────────────────────────────────────────── */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0 12px;margin-bottom:12px;border-bottom:1px solid var(--bdr)}
+.fi{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:6px 10px;color:var(--txt);font-family:var(--mono);font-size:11px;outline:none;transition:border-color .2s}
+.fi:focus{border-color:var(--ac)}
+.ft{background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:5px 12px;color:var(--dim);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .2s;line-height:1.4}
+.ft:hover{border-color:var(--ac);color:var(--txt)}
+.ft.on{background:rgba(91,106,240,.2);border-color:var(--ac);color:var(--ac2)}
+.fc{font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto;padding:5px 0;white-space:nowrap}
+/* ─── Agent sortable table ─────────────────────────────────────────────── */
+.ag-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.ag-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.ag-tbl thead th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);padding:7px 9px;text-align:left;border-bottom:2px solid var(--bdr);white-space:nowrap;background:var(--s1)}
+.ag-tbl tbody tr{border-bottom:1px solid rgba(42,42,61,.4);cursor:pointer;transition:background .15s}
+.ag-tbl tbody tr:hover{background:var(--s2)}
+.ag-tbl tbody tr.coaching-row{border-left:3px solid var(--danger);background:rgba(248,113,113,.04)}
+.ag-tbl tbody tr.selected-row{background:rgba(91,106,240,.1);border-left:3px solid var(--ac)}
+.ag-tbl td{padding:8px 9px;vertical-align:middle}
+.sort-th{cursor:pointer;user-select:none;transition:color .15s}
+.sort-th:hover{color:var(--txt)}
+.sort-th.asc::after{content:' ▲';font-size:8px;opacity:.6}
+.sort-th.desc::after{content:' ▼';font-size:8px;opacity:.6}
+/* ─── Empty / loading states ───────────────────────────────────────────── */
+.empty-state{padding:48px 20px;text-align:center;color:var(--dim)}
+.empty-icon{font-size:32px;margin-bottom:10px;opacity:.5}
+.empty-title{font-size:14px;margin-bottom:6px;color:var(--txt)}
+.empty-sub{font-size:12px;color:var(--dim)}
+/* ─── Risk / coaching badges ───────────────────────────────────────────── */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;white-space:nowrap}
+.badge-high{background:rgba(248,113,113,.15);color:var(--danger)}
+.badge-med{background:rgba(249,115,22,.15);color:#f97316}
+.badge-low{background:rgba(52,211,153,.15);color:var(--ok)}
+.badge-warn{background:rgba(251,191,36,.15);color:var(--warn)}
+.badge-dim{background:var(--s2);color:var(--dim)}
+.coaching-pill{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(248,113,113,.2);color:var(--danger);vertical-align:middle;margin-left:4px}
+.coaching-banner{padding:9px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;font-size:12px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+/* ─── Trend indicators ─────────────────────────────────────────────────── */
+.t-up{color:var(--ok);font-weight:700}
+.t-dn{color:var(--danger);font-weight:700}
+.t-st{color:var(--dim)}
+/* ─── Score bar inline ─────────────────────────────────────────────────── */
+.score-bar-wrap{display:flex;align-items:center;gap:6px}
+.score-bar-bg{width:44px;height:4px;background:var(--bdr);border-radius:2px;overflow:hidden;flex-shrink:0}
+.score-bar-fill{height:100%;border-radius:2px;transition:width .3s}
+/* ─── KPI delta ────────────────────────────────────────────────────────── */
+.kpi-delta{font-size:10px;font-family:var(--mono);margin-top:2px}
+@media(max-width:700px){.ag-wrap{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -124,6 +174,9 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('cat')">Categories</div>
 </div>
 
+<!-- FILTER BAR (shown for tix / ag / ch tabs) -->
+<div class="filter-bar" id="filter-bar" style="display:none"></div>
+
 <!-- OVERVIEW -->
 <div class="tab-content active" id="tab-ov">
   <div class="sg">
@@ -153,7 +206,7 @@ tbody td{padding:7px 9px;vertical-align:top}
 
 <!-- AGENTS -->
 <div class="tab-content" id="tab-ag">
-  <div class="tc">
+  <div class="ag-wrap">
     <details style="margin-bottom:14px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;grid-column:1/-1">
       <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
         <span>ℹ️</span> How are agents &amp; groups measured? <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
@@ -190,8 +243,27 @@ tbody td{padding:7px 9px;vertical-align:top}
         </div>
       </div>
     </details>
-    <div id="ag-list"></div>
-    <div id="ag-detail"><div class="card"><h3>Select an agent</h3><p style="color:var(--dim)">Click a card to view scorecard.</p></div></div>
+    <!-- Left: sortable table -->
+    <div>
+      <div id="ag-coaching-banner"></div>
+      <div id="ag-table-wrap" style="overflow-x:auto">
+        <table class="ag-tbl">
+          <thead>
+            <tr>
+              <th class="sort-th" id="ath-name" onclick="setAgSort('name')">Agent</th>
+              <th class="sort-th" id="ath-count" onclick="setAgSort('count')" style="text-align:right">Tickets</th>
+              <th class="sort-th" id="ath-avg" onclick="setAgSort('avg')" style="text-align:right">QA Score</th>
+              <th class="sort-th" id="ath-trend" onclick="setAgSort('trendDelta')" style="text-align:right">Trend</th>
+              <th class="sort-th" id="ath-churn" onclick="setAgSort('churnPct')" style="text-align:right">Churn%</th>
+              <th class="sort-th" id="ath-risk" onclick="setAgSort('riskLevel')" style="text-align:center">Risk</th>
+            </tr>
+          </thead>
+          <tbody id="ag-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Right: detail panel -->
+    <div id="ag-detail"><div class="card"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Select an agent</div><div class="empty-sub">Click a row to view scorecard</div></div></div></div>
   </div>
 </div>
 
@@ -364,19 +436,254 @@ let _evals = [];
 let _curPage = 1;
 const PS = 50;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE  — single source of truth
+// ═══════════════════════════════════════════════════════════════════════════
+const State = {
+  evals:  [],
+  runs:   [],
+  _token: sessionStorage.getItem('qa_token'),
+
+  _filters: {
+    search: '', group: '', dateFrom: '', dateTo: '',
+    churnOnly: false, minScore: 0,
+  },
+  _agSort: { key: 'churnPct', dir: 'desc' },
+  _page: 1,
+  _listeners: new Set(),
+
+  get filtered() { return Filter.apply(this.evals, this._filters); },
+
+  setEvals(data)      { this.evals = data || []; this._page = 1; this.notify(); },
+  setFilter(key, val) { this._filters[key] = val; this._page = 1; this.notify(); },
+  setPage(p)          { this._page = p; this.notify(); },
+  setAgSort(key) {
+    if (this._agSort.key === key) {
+      this._agSort.dir = this._agSort.dir === 'desc' ? 'asc' : 'desc';
+    } else { this._agSort.key = key; this._agSort.dir = 'desc'; }
+    this.notify();
+  },
+  subscribe(fn) { this._listeners.add(fn); },
+  notify()      { this._listeners.forEach(fn => { try { fn(); } catch(e){} }); },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FILTER ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+const Filter = {
+  apply(evals, f) {
+    return evals.filter(e => {
+      if (f.churnOnly && !e.churn_risk_flag) return false;
+      if (f.group && e.group_name !== f.group) return false;
+      if (f.minScore > 0 && (e.total_score || 0) < f.minScore) return false;
+      if (f.search) {
+        const q = f.search.toLowerCase();
+        if (!String(e.ticket_id).includes(q) &&
+            !(e.agent_name||'').toLowerCase().includes(q) &&
+            !(e.subject||'').toLowerCase().includes(q)) return false;
+      }
+      if (f.dateFrom) {
+        const ts = (e.created_at || '').slice(0,10);
+        if (ts && ts < f.dateFrom) return false;
+      }
+      if (f.dateTo) {
+        const ts = (e.created_at || '').slice(0,10);
+        if (ts && ts > f.dateTo) return false;
+      }
+      return true;
+    });
+  },
+  groups(evals) {
+    return [...new Set(evals.map(e => e.group_name).filter(Boolean))].sort();
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════
+const AgentAnalytics = {
+  MIN_TICKETS:  10,
+  GLOBAL_CHURN: 18.6,
+  GLOBAL_QA:    59.0,
+
+  calcTrend(tickets) {
+    const scored = tickets.filter(t => t.total_score != null && t.created_at);
+    if (scored.length < 6) return null;
+    const s = [...scored].sort((a,b) => a.created_at.localeCompare(b.created_at));
+    const mid = Math.floor(s.length / 2);
+    const avg = arr => arr.reduce((x,t) => x + t.total_score, 0) / arr.length;
+    const delta = parseFloat((avg(s.slice(mid)) - avg(s.slice(0,mid))).toFixed(1));
+    return { delta, direction: delta > 3 ? 'up' : delta < -3 ? 'down' : 'stable' };
+  },
+
+  classifyRisk(avg, churnPct, count) {
+    if (count < this.MIN_TICKETS)
+      return { level:'unknown', label:'—',          cls:'badge-dim',  color:'var(--dim)' };
+    if ((avg < 55 && churnPct >= this.GLOBAL_CHURN) || churnPct >= 30)
+      return { level:'high',    label:'🔴 High',    cls:'badge-high', color:'var(--danger)' };
+    if (avg >= 70 && churnPct >= this.GLOBAL_CHURN)
+      return { level:'mismatch',label:'⚠️ Mismatch',cls:'badge-warn', color:'var(--warn)' };
+    if (churnPct >= this.GLOBAL_CHURN || avg < this.GLOBAL_QA)
+      return { level:'medium',  label:'🟠 Medium',  cls:'badge-med',  color:'#f97316' };
+    return   { level:'low',     label:'✅ Low',     cls:'badge-low',  color:'var(--ok)' };
+  },
+
+  needsCoaching(avg, churnPct, count) {
+    if (count < this.MIN_TICKETS) return false;
+    return avg < 55 || churnPct > 25 || (avg < 65 && churnPct > this.GLOBAL_CHURN);
+  },
+
+  build(evals) {
+    const m = {};
+    for (const e of evals) {
+      const k = e.agent_name || 'Unknown';
+      if (!m[k]) m[k] = { name:k, group:e.group_name||'', tickets:[], churn:0 };
+      m[k].tickets.push(e);
+      if (e.churn_risk_flag) m[k].churn++;
+    }
+    return Object.values(m).map(a => {
+      const count    = a.tickets.length;
+      const avg      = count
+        ? parseFloat((a.tickets.reduce((s,t)=>s+(t.total_score||0),0)/count).toFixed(1)) : 0;
+      const churnPct = count ? parseFloat((a.churn/count*100).toFixed(1)) : 0;
+      const trend    = this.calcTrend(a.tickets);
+      const risk     = this.classifyRisk(avg, churnPct, count);
+      const coaching  = this.needsCoaching(avg, churnPct, count);
+      const showScore = count >= this.MIN_TICKETS;
+      const trendDelta = trend ? trend.delta : null;
+      const riskLevel  = ['unknown','low','medium','mismatch','high'].indexOf(risk.level);
+      return { ...a, count, avg, churnPct, trend, trendDelta, risk, riskLevel, coaching, showScore };
+    });
+  },
+
+  sort(agents, key, dir) {
+    const d = dir === 'desc' ? -1 : 1;
+    return [...agents].sort((a,b) => {
+      let av = a[key], bv = b[key];
+      if (av == null) av = dir === 'desc' ? -Infinity : Infinity;
+      if (bv == null) bv = dir === 'desc' ? -Infinity : Infinity;
+      if (typeof av === 'string') return av.localeCompare(bv) * d;
+      return (av - bv) * d;
+    });
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+const UI = {
+  scoreColor(s) {
+    return s >= 75 ? 'var(--ok)' : s >= 55 ? 'var(--warn)' : 'var(--danger)';
+  },
+  skeleton(lines = 3, widths) {
+    return Array.from({length:lines},(_,i) => {
+      const w = widths ? widths[i%widths.length] : (60+(i*17)%35);
+      return `<div class="skel" style="height:13px;width:${w}%;margin-bottom:10px"></div>`;
+    }).join('');
+  },
+  empty(title, sub='', icon='📭') {
+    return `<div class="empty-state">
+      <div class="empty-icon">${icon}</div>
+      <div class="empty-title">${title}</div>
+      ${sub ? `<div class="empty-sub">${sub}</div>` : ''}
+    </div>`;
+  },
+  loading(elId, lines=3) {
+    const el = document.getElementById(elId);
+    if (el) el.innerHTML = this.skeleton(lines);
+  },
+  trendBadge(trend) {
+    if (!trend) return '<span class="t-st">—</span>';
+    const map = {up:['t-up','↑'],down:['t-dn','↓'],stable:['t-st','→']};
+    const [cls,icon] = map[trend.direction]||['t-st','—'];
+    const sign = trend.delta > 0 ? '+' : '';
+    return `<span class="${cls}" style="font-family:var(--mono);font-size:11px">${icon} ${sign}${trend.delta}</span>`;
+  },
+  riskBadge(risk) {
+    if (risk.level === 'unknown') return '<span class="badge badge-dim">—</span>';
+    return `<span class="badge ${risk.cls}">${risk.label}</span>`;
+  },
+  scoreCell(avg, showScore) {
+    if (!showScore)
+      return `<span style="color:var(--dim);font-size:10px;font-style:italic">n&lt;${AgentAnalytics.MIN_TICKETS}</span>`;
+    const c   = this.scoreColor(avg);
+    const pct = Math.min(avg, 100);
+    return `<div class="score-bar-wrap">
+      <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${c}"></div></div>
+      <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${c};width:38px">${avg}</span>
+    </div>`;
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FILTER BAR
+// ═══════════════════════════════════════════════════════════════════════════
+const FilterBar = {
+  activeTab: '',
+  render(tabId) {
+    this.activeTab = tabId;
+    const bar  = document.getElementById('filter-bar');
+    if (!bar) return;
+    const show = ['tix','ag','ch'].includes(tabId);
+    bar.style.display = show ? 'flex' : 'none';
+    if (!show) return;
+    const f      = State._filters;
+    const groups = Filter.groups(State.evals);
+    const total  = State.evals.length;
+    const shown  = State.filtered.length;
+    bar.innerHTML = `
+      <input class="fi" id="fb-search" type="text" placeholder="Search ticket / agent…"
+        value="${f.search}" oninput="FilterBar.onInput()" style="min-width:150px">
+      <select class="fi" id="fb-group" onchange="FilterBar.onInput()" style="min-width:130px">
+        <option value="">All teams</option>
+        ${groups.map(g=>`<option value="${g}"${f.group===g?' selected':''}>${g}</option>`).join('')}
+      </select>
+      <input class="fi" id="fb-date-from" type="date" value="${f.dateFrom||''}"
+        title="From date" onchange="FilterBar.onInput()">
+      <input class="fi" id="fb-date-to" type="date" value="${f.dateTo||''}"
+        title="To date" onchange="FilterBar.onInput()">
+      <input class="fi" id="fb-min-score" type="number" min="0" max="100"
+        placeholder="Min score" value="${f.minScore||''}"
+        title="Minimum QA score" onchange="FilterBar.onInput()" style="width:82px">
+      <button class="ft${f.churnOnly?' on':''}" onclick="FilterBar.toggleChurn()">🚨 Churn</button>
+      <button class="ft" onclick="FilterBar.reset()">✕ Reset</button>
+      <span class="fc">${shown<total?`<strong style="color:var(--ac2)">${shown}</strong> / ${total}`:total} tickets</span>
+    `;
+  },
+  onInput() {
+    State.setFilter('search',   document.getElementById('fb-search')?.value   ||'');
+    State.setFilter('group',    document.getElementById('fb-group')?.value    ||'');
+    State.setFilter('dateFrom', document.getElementById('fb-date-from')?.value||'');
+    State.setFilter('dateTo',   document.getElementById('fb-date-to')?.value  ||'');
+    State.setFilter('minScore', parseInt(document.getElementById('fb-min-score')?.value)||0);
+  },
+  toggleChurn() {
+    State.setFilter('churnOnly', !State._filters.churnOnly);
+    this.render(this.activeTab);
+  },
+  reset() {
+    ['search','group','dateFrom','dateTo'].forEach(k=>State.setFilter(k,''));
+    State.setFilter('churnOnly',false);
+    State.setFilter('minScore',0);
+    this.render(this.activeTab);
+  },
+};
+
+
 async function apiFetch(path, opts = {}) {
+  const tok = State._token || _token;
   const r = await fetch(`${API}${path}`, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
-      ...(_token ? { 'Authorization': `Bearer ${_token}` } : {}),
+      ...(tok ? { 'Authorization': `Bearer ${tok}` } : {}),
       ...(opts.headers || {}),
     },
   });
   if (r.status === 401) { logout(); return null; }
   if (!r.ok) { const t = await r.text(); throw new Error(t); }
   if (r.headers.get('content-type')?.includes('json')) return r.json();
-  return r; // for binary responses
+  return r;
 }
 
 async function doLogin() {
@@ -396,6 +703,7 @@ async function doLogin() {
     if (!r.ok) { err.textContent = 'Invalid email or password'; return; }
     const data = await r.json();
     _token = data.access_token;
+    State._token = data.access_token;
     sessionStorage.setItem('qa_token', _token);
     await initApp();
   } catch(e) {
@@ -432,11 +740,35 @@ async function initApp() {
 }
 
 async function loadEvals() {
+  // Show loading skeletons
+  UI.loading('cat-bars', 4);
+  UI.loading('fail-bars', 4);
   try {
-    _evals = await apiFetch('/tickets?limit=1000') || [];
+    const data = await apiFetch('/tickets?limit=1000') || [];
+    State.setEvals(data);
+    _evals = State.evals; // keep legacy alias in sync
     renderAll();
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+    document.getElementById('ov-summary').innerHTML =
+      UI.empty('Failed to load data', e.message, '⚠️');
+  }
 }
+
+// Subscribe to state changes → re-render current tab
+State.subscribe(() => {
+  const activeTab = document.querySelector('.tab.active');
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat'];
+  const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
+  const currentTab = tabs[tabIdx] ?? 'ov';
+  // Only re-render filterable tabs on filter change
+  if (['tix','ag','ch'].includes(currentTab)) {
+    if (currentTab === 'tix') renderTix();
+    if (currentTab === 'ag')  renderAg();
+    if (currentTab === 'ch')  renderCh();
+    FilterBar.render(currentTab);
+  }
+});
 
 // Auto-init if token exists
 if (_token) initApp();
@@ -449,6 +781,7 @@ function showTab(id) {
   const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
+  FilterBar.render(id);
   if (id === 'runs') loadRunHistory();
   if (id === 'exp')  loadRunsForExport();
   if (id === 'cat')  renderCat();
@@ -567,7 +900,16 @@ async function loadRunsForExport() {
 // ═══════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════
-function renderAll() { renderOv(); renderTix(); renderAg(); renderCh(); scInit(); agrevInit(); }
+function renderAll() {
+  renderOv();
+  renderTix();
+  renderAg();
+  renderCh();
+  scInit();
+  agrevInit();
+  // Re-render filter bar for current tab
+  FilterBar.render(FilterBar.activeTab || 'ov');
+}
 
 function getCat(ev, cat) {
   const s = ev.scores || {};
@@ -578,7 +920,20 @@ function getCat(ev, cat) {
 }
 
 function renderOv() {
-  const n = _evals.length; if (!n) return;
+  const n = _evals.length;
+  if (!n) {
+    document.getElementById('ov-summary').innerHTML =
+      UI.empty('No data loaded', 'Start a run from the Runs tab to evaluate tickets.', '📊');
+    ['cat-bars','fail-bars'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = UI.skeleton(5, [80,65,90,55,70]);
+    });
+    ['s0','s1','s2','s3','s4'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    return;
+  }
   const avg = Math.round(_evals.reduce((s,e)=>s+(e.total_score||0),0)/n*10)/10;
   const chN = _evals.filter(e=>e.churn_risk_flag).length;
   const coN = _evals.filter(e=>e.contact_problem_flag).length;
@@ -624,92 +979,151 @@ function renderOv() {
 }
 
 function renderTix() {
-  const s = (_curPage-1)*PS;
-  document.getElementById('tix-count').textContent = '(' + _evals.length + ' total)';
-  document.getElementById('tbl-body').innerHTML = _evals.slice(s, s+PS).map(e =>
-    `<tr onclick="showTicket('${e.ticket_id}')">
-      <td style="font-family:var(--mono);color:var(--ac);font-size:10px">#${e.ticket_id}</td>
-      <td>${e.agent_name||'—'}</td>
-      <td style="color:var(--dim);font-size:11px">${e.group_name||'—'}</td>
-      <td><span class="tag ${e.total_score>=75?'tL':e.total_score>=55?'tH':'tC'}">${e.total_score}</span></td>
-      <td>${e.churn_risk_flag?'🚨':'—'}</td>
-      <td>${e.contact_problem_flag?'⚠️':'—'}</td>
-      <td style="font-family:var(--mono);font-size:10px">${e.csat||'—'}</td>
-      <td style="font-size:11px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.coaching_tip||''}</td>
-    </tr>`
-  ).join('');
-  const tp = Math.ceil(_evals.length/PS);
-  document.getElementById('tbl-pg').innerHTML =
-    `<button class="pgb" onclick="goPage(${_curPage-1})" ${_curPage<=1?'disabled':''}>← Prev</button>
-     Page ${_curPage}/${Math.max(tp,1)}
-     <button class="pgb" onclick="goPage(${_curPage+1})" ${_curPage>=tp?'disabled':''}>Next →</button>`;
-}
-function goPage(p) { _curPage = p; renderTix(); }
+  const filtered = State.filtered;
+  const page     = State._page;
+  const s = (page - 1) * PAGE_SIZE;
+  const slice = filtered.slice(s, s + PAGE_SIZE);
+  const total = _evals.length;
 
-function renderAg() {
-  const MIN_TICKETS = 3;   // min tickets before showing risk profile
-  const GLOBAL_CHURN = 18.6;
-  const GLOBAL_QA    = 59.0;
-
-  const m = {};
-  for (const e of _evals) {
-    const k = e.agent_name || 'Unknown';
-    if (!m[k]) m[k] = { name:k, group:e.group_name||'', ev:[], ch:0 };
-    m[k].ev.push(e);
-    if (e.churn_risk_flag) m[k].ch++;
+  // Update count badge
+  const countEl = document.getElementById('tix-count');
+  if (countEl) {
+    countEl.textContent = filtered.length < total
+      ? `(${filtered.length} of ${total})`
+      : `(${total} total)`;
   }
 
-  const agents = Object.values(m).map(a => {
-    const avg       = Math.round(a.ev.reduce((s,e)=>s+(e.total_score||0),0)/a.ev.length);
-    const churnPct  = a.ev.length > 0 ? parseFloat(((a.ch/a.ev.length)*100).toFixed(1)) : 0;
-    const enoughData = a.ev.length >= MIN_TICKETS;
+  // Empty state
+  const tbody = document.getElementById('tbl-body');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8">${
+      _evals.length
+        ? UI.empty('No tickets match your filters', 'Try adjusting the search or filters above.', '🔍')
+        : UI.empty('No tickets loaded', 'Start a run via the Runs tab first.', '📋')
+    }</td></tr>`;
+    document.getElementById('tbl-pg').innerHTML = '';
+    return;
+  }
 
-    // Risk profile — only assigned when >= MIN_TICKETS
-    let profile = '', profileColor = 'var(--dim)', profileBg = 'transparent';
-    if (enoughData) {
-      const highQA    = avg >= 70;
-      const highChurn = churnPct >= GLOBAL_CHURN;
-      const lowQA     = avg < GLOBAL_QA;
-      if (highQA && highChurn) {
-        profile = '⚠️ QA/Churn mismatch'; profileColor = 'var(--warn)'; profileBg = 'rgba(251,191,36,.12)';
-      } else if (highChurn && lowQA) {
-        profile = '🔴 High risk'; profileColor = 'var(--danger)'; profileBg = 'rgba(248,113,113,.1)';
-      } else if (highChurn) {
-        profile = '🟠 Watch'; profileColor = '#f97316'; profileBg = 'rgba(249,115,22,.1)';
-      } else if (!highChurn && highQA) {
-        profile = '✅ Low risk'; profileColor = 'var(--ok)'; profileBg = 'rgba(52,211,153,.1)';
-      } else {
-        profile = '🟡 Average'; profileColor = '#eab308'; profileBg = 'rgba(234,179,8,.08)';
-      }
-    }
+  tbody.innerHTML = slice.map(e => {
+    const sc = e.total_score;
+    const scoreClass = sc >= 75 ? 'tL' : sc >= 55 ? 'tH' : 'tC';
+    const rowStyle = e.churn_risk_flag ? 'background:rgba(248,113,113,.04)' : '';
+    return `<tr onclick="showTicket('${e.ticket_id}')" style="${rowStyle}">
+      <td style="font-family:var(--mono);color:var(--ac);font-size:10px">#${e.ticket_id}</td>
+      <td style="white-space:nowrap">${e.agent_name||'—'}</td>
+      <td style="color:var(--dim);font-size:11px">${e.group_name||'—'}</td>
+      <td><span class="tag ${scoreClass}">${sc}</span></td>
+      <td style="text-align:center">${e.churn_risk_flag ? '🚨' : '<span style="color:var(--dim)">—</span>'}</td>
+      <td style="text-align:center">${e.contact_problem_flag ? '⚠️' : '<span style="color:var(--dim)">—</span>'}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${e.csat||'—'}</td>
+      <td style="font-size:11px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)">${e.coaching_tip||''}</td>
+    </tr>`;
+  }).join('');
 
-    return { ...a, avg, churnPct, enoughData, profile, profileColor, profileBg };
-  }).sort((a,b) => b.churnPct - a.churnPct);  // sort by churn risk desc
+  const tp = Math.ceil(filtered.length / PAGE_SIZE);
+  document.getElementById('tbl-pg').innerHTML =
+    `<button class="pgb" onclick="goPage(${page-1})" ${page<=1?'disabled':''}>← Prev</button>
+     <span>Page ${page} / ${Math.max(tp,1)}</span>
+     <button class="pgb" onclick="goPage(${page+1})" ${page>=tp?'disabled':''}>Next →</button>
+     ${filtered.length < total ? `<span style="color:var(--warn);font-size:10px">Filtered</span>` : ''}`;
+}
+function goPage(p) { State.setPage(p); renderTix(); }
 
-  document.getElementById('ag-list').innerHTML = agents.map(a => `
-    <div class="card" style="cursor:pointer;margin-bottom:10px;padding:12px 14px" onclick="showAgent('${a.name.replace(/'/g,"\'")}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-family:var(--disp);font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}</div>
-          <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:2px">${a.group||'—'} · ${a.ev.length} ticket${a.ev.length!==1?'s':''}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${a.avg>=75?'var(--ok)':a.avg>=55?'var(--warn)':'var(--danger)'}">${a.avg}/100</div>
-          <div style="font-size:11px;color:${a.ch>0?'var(--danger)':'var(--dim)'};margin-top:1px">${a.churnPct}% churn</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <div class="bw" style="flex:1;margin:0"><div class="bf" style="width:${a.avg}%;background:${a.avg>=75?'var(--ok)':a.avg>=55?'var(--warn)':'var(--danger)'}"></div></div>
-        ${a.enoughData
-          ? `<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap;background:${a.profileBg};color:${a.profileColor}">${a.profile}</span>`
-          : `<span style="font-size:10px;color:var(--dim);font-style:italic">n=${a.ev.length} — low data</span>`
-        }
-      </div>
-    </div>`).join('');
+function renderAg() {
+  const agents  = AgentAnalytics.build(State.filtered);
+  const sorted  = AgentAnalytics.sort(agents, State._agSort.key, State._agSort.dir);
+  const coaching = sorted.filter(a => a.coaching);
+
+  // ── Update sort header indicators ──────────────────────────────────────
+  ['name','count','avg','trendDelta','churnPct','riskLevel'].forEach(k => {
+    const id = { name:'ath-name', count:'ath-count', avg:'ath-avg',
+                 trendDelta:'ath-trend', churnPct:'ath-churn', riskLevel:'ath-risk' }[k];
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('asc','desc');
+    if (State._agSort.key === k) el.classList.add(State._agSort.dir);
+  });
+
+  // ── Coaching banner ─────────────────────────────────────────────────────
+  const bannerEl = document.getElementById('ag-coaching-banner');
+  if (bannerEl) {
+    bannerEl.innerHTML = coaching.length
+      ? `<div class="coaching-banner">
+          <span style="font-size:16px">🎯</span>
+          <div>
+            <strong>${coaching.length} agent${coaching.length!==1?'s':''} flagged for coaching</strong>
+            <span style="color:var(--dim);margin-left:8px;font-size:11px">
+              QA below 55 or churn above 25%
+            </span>
+          </div>
+        </div>`
+      : '';
+  }
+
+  // ── Empty state ──────────────────────────────────────────────────────────
+  const tbody = document.getElementById('ag-tbody');
+  if (!tbody) return;
+
+  if (!agents.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:0">${
+      _evals.length
+        ? UI.empty('No agents match the current filters', '', '🔍')
+        : UI.empty('No agent data', 'Run an analysis first to see agent metrics.', '👥')
+    }</td></tr>`;
+    return;
+  }
+
+  // ── Table rows ───────────────────────────────────────────────────────────
+  tbody.innerHTML = sorted.map(a => {
+    const rowClass = [
+      a.coaching  ? 'coaching-row' : '',
+    ].filter(Boolean).join(' ');
+
+    const coachingBadge = a.coaching
+      ? '<span class="coaching-pill">🎯 coaching</span>'
+      : '';
+
+    const churnColor = a.churnPct > 30 ? 'var(--danger)'
+                     : a.churnPct > 18.6 ? '#f97316'
+                     : 'var(--ok)';
+
+    return `<tr class="${rowClass}" onclick="selectAgent('${a.name.replace(/'/g,"\\'")}')">
+      <td>
+        <div style="font-weight:600;font-size:12px;white-space:nowrap">${a.name}${coachingBadge}</div>
+        <div style="font-size:10px;color:var(--dim)">${a.group||'—'}</div>
+      </td>
+      <td style="text-align:right;font-family:var(--mono)">${a.count}</td>
+      <td style="text-align:right">${UI.scoreCell(a.avg, a.showScore)}</td>
+      <td style="text-align:right">${UI.trendBadge(a.trend)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;color:${churnColor}">${a.churnPct}%</td>
+      <td style="text-align:center">${UI.riskBadge(a.risk)}</td>
+    </tr>`;
+  }).join('');
 }
 
+let _selectedAgent = null;
+
+function setAgSort(key) {
+  State.setAgSort(key);
+  renderAg();
+}
+
+async function selectAgent(name) {
+  _selectedAgent = name;
+  // Highlight selected row
+  document.querySelectorAll('#ag-tbody tr').forEach(tr => {
+    const nameEl = tr.querySelector('td div');
+    const rowName = nameEl?.textContent?.trim().replace(/🎯 coaching/,'').trim();
+    tr.classList.toggle('selected-row', rowName === name);
+  });
+  await showAgent(name);
+}
 
 async function showAgent(name) {
+  const detailEl = document.getElementById('ag-detail');
+  // Show loading state
+  if (detailEl) detailEl.innerHTML = `<div class="card">${UI.skeleton(5)}</div>`;
   try {
     const data = await apiFetch('/agents/' + encodeURIComponent(name));
     if (!data) return;
@@ -812,19 +1226,58 @@ async function showAgent(name) {
 }
 
 function renderCh() {
-  const ch = _evals.filter(e => e.churn_risk_flag);
-  document.getElementById('ch-list').innerHTML = ch.length
-    ? ch.map(e => `
-        <div style="padding:11px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;margin-bottom:10px;cursor:pointer" onclick="showTicket('${e.ticket_id}')">
-          <div style="display:flex;justify-content:space-between;margin-bottom:2px">
-            <strong style="font-size:12px">#${e.ticket_id} — ${e.agent_name||'?'} (${e.group_name||''})</strong>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--danger)">${e.total_score}</span>
-          </div>
-          <div style="font-size:12px;color:var(--dim)">${e.churn_risk_reason||''}</div>
-          <div style="font-size:11px;color:var(--warn);margin-top:3px">→ ${e.coaching_tip||''}</div>
-        </div>`
-    ).join('')
-    : '<p style="color:var(--dim)">No churn risk detected.</p>';
+  // Use filtered evals, then further filter for churn
+  const ch = State.filtered.filter(e => e.churn_risk_flag);
+  const listEl = document.getElementById('ch-list');
+  if (!listEl) return;
+
+  if (!_evals.length) {
+    listEl.innerHTML = UI.empty('No tickets loaded', 'Run an analysis first.', '📋');
+    return;
+  }
+  if (!ch.length) {
+    listEl.innerHTML = State._filters.group || State._filters.search || State._filters.churnOnly === false
+      ? UI.empty('No churn risk in current filter', 'Try adjusting the team or date filters.', '✅')
+      : UI.empty('No churn risk detected', 'Great news — no tickets flagged in this dataset.', '✅');
+    return;
+  }
+
+  // Group by agent for summary
+  const byAgent = {};
+  ch.forEach(e => {
+    const a = e.agent_name || 'Unknown';
+    if (!byAgent[a]) byAgent[a] = { count: 0, totalScore: 0 };
+    byAgent[a].count++;
+    byAgent[a].totalScore += (e.total_score || 0);
+  });
+
+  // Summary pill
+  const summaryHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    ${Object.entries(byAgent).sort((a,b) => b[1].count - a[1].count).map(([name, d]) => `
+      <div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:6px 12px;font-size:11px">
+        <strong>${name}</strong>
+        <span style="color:var(--danger);font-family:var(--mono);margin-left:6px">${d.count} flags</span>
+      </div>`).join('')}
+  </div>`;
+
+  listEl.innerHTML = summaryHtml + ch.map(e => {
+    const riskColor = (e.total_score||0) < 55 ? 'var(--danger)' : 'var(--warn)';
+    return `<div style="padding:11px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;margin-bottom:10px;cursor:pointer;transition:background .15s"
+      onclick="showTicket('${e.ticket_id}')"
+      onmouseover="this.style.background='rgba(248,113,113,.12)'"
+      onmouseout="this.style.background='rgba(248,113,113,.07)'">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <div>
+          <strong style="font-size:12px">#${e.ticket_id}</strong>
+          <span style="font-size:11px;color:var(--dim);margin-left:8px">${e.agent_name||'?'}</span>
+          ${e.group_name ? `<span style="font-size:10px;color:var(--dim);margin-left:6px">(${e.group_name})</span>` : ''}
+        </div>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${riskColor}">${e.total_score}</span>
+      </div>
+      ${e.churn_risk_reason ? `<div style="font-size:12px;color:var(--dim);margin-bottom:3px">${e.churn_risk_reason}</div>` : ''}
+      ${e.coaching_tip ? `<div style="font-size:11px;color:var(--warn)">→ ${e.coaching_tip}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 async function showTicket(tid) {
