@@ -32,7 +32,7 @@ from database import AsyncSessionLocal
 from models import Run, Ticket, Message, Evaluation
 from services.freshdesk import (
     fetch_all_tickets, fetch_conversations,
-    build_thread, detect_churn,
+    build_thread, detect_churn, is_confirmed_churn,
 )
 from services.claude import eval_ticket
 
@@ -95,7 +95,8 @@ async def _process_ticket(
         try:
             convs    = await fetch_conversations(ticket_id)
             thread   = build_thread(ticket, convs)
-            churn_kw = detect_churn(thread)
+            churn_kw        = detect_churn(thread)
+            churn_confirmed = is_confirmed_churn(ticket)
 
             created_at  = _dt(ticket.get("created_at"))
             updated_at  = _dt(ticket.get("updated_at"))
@@ -172,15 +173,28 @@ async def _process_ticket(
                     sentiment_start=(ev.get("sentiment") or {}).get("start"),
                     sentiment_end=(ev.get("sentiment") or {}).get("end"),
                     summary=ev.get("summary"),
-                    # Dual-signal churn: Claude explicit flag OR (keyword + low score)
-                    # Prevents false positives where agent handled well but
-                    # a generic word like "si opp" appeared in the thread.
+                    # Churn detection — three tiers in priority order:
+                    #
+                    # TIER 1 — Confirmed (salesforce tag):
+                    #   Customer has actually terminated their contract in Salesforce.
+                    #   This is ground truth. Overrides all other signals. No score gate.
+                    #
+                    # TIER 2 — Claude explicit inference:
+                    #   The AI identified clear cancellation intent in the conversation.
+                    #
+                    # TIER 3 — Keyword match + low score (<70):
+                    #   Phrase-level keyword found AND agent quality was poor.
+                    #   High-quality handling (score ≥70) suppresses keyword-only flags.
                     churn_risk_flag=bool(
+                        churn_confirmed or
                         ev.get("churn_risk_flag") or
                         (churn_kw and (ev.get("total_score") or 100) < 70)
                     ),
-                    churn_risk_reason=ev.get("churn_risk_reason") or (
-                        f'Signal: "{churn_kw}"' if churn_kw else None
+                    churn_risk_reason=(
+                        "Confirmed: Customer has terminated contract (Salesforce)"
+                        if churn_confirmed else
+                        ev.get("churn_risk_reason") or
+                        (f'Signal: "{churn_kw}"' if churn_kw else None)
                     ),
                     contact_problem_flag=bool(ev.get("contact_problem_flag")),
                     coaching_tip=ev.get("coaching_tip"),
@@ -193,8 +207,9 @@ async def _process_ticket(
             elapsed = time.monotonic() - t0
             counters["done"]    += 1
             counters["timings"].append(elapsed)
-            # Use same dual-signal logic as the DB write above
+            # Mirror the three-tier churn logic from the DB write above
             _churn_flagged = bool(
+                churn_confirmed or
                 ev.get("churn_risk_flag") or
                 (churn_kw and (ev.get("total_score") or 100) < 70)
             )

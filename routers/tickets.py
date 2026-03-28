@@ -18,6 +18,7 @@ class TicketOut(BaseModel):
     subject: Optional[str]
     agent_name: Optional[str]
     group_name: Optional[str]
+    tags: Optional[List[str]]
     csat: Optional[int]
     created_at: Optional[str]
     resolved_at: Optional[str]
@@ -25,6 +26,7 @@ class TicketOut(BaseModel):
     complexity: Optional[str]
     churn_risk_flag: bool
     churn_risk_reason: Optional[str]
+    churn_confirmed: bool          # True when salesforce tag present — contract terminated
     contact_problem_flag: bool
     coaching_tip: Optional[str]
     summary: Optional[str]
@@ -48,6 +50,7 @@ async def list_tickets(
             Ticket.subject,
             Ticket.agent_name,
             Ticket.group_name,
+            Ticket.tags,
             Ticket.csat,
             Ticket.created_at,
             Ticket.resolved_at,
@@ -85,6 +88,7 @@ async def list_tickets(
             subject=r["subject"],
             agent_name=r["agent_name"],
             group_name=r["group_name"],
+            tags=r["tags"] or [],
             csat=r["csat"],
             created_at=str(r["created_at"] or "")[:10],
             resolved_at=str(r["resolved_at"] or "")[:10],

@@ -59,10 +59,20 @@ def _build_prompt(ticket: Dict, thread: List[Dict]) -> str:
         for m in thread[:6]
     )
 
+    tags            = ticket.get("tags") or []
+    sf_tag          = any(t.lower().strip() == "salesforce" for t in tags)
+    sf_context      = (
+        "NOTE: This ticket is tagged 'salesforce' — the customer has CONFIRMED "
+        "contract termination recorded in Salesforce. Set churn_risk_flag:true.\n"
+        if sf_tag else ""
+    )
+
     return (
         f"Ticket:{ticket['id']} Agent:{agent_name} Group:{group_name} "
         f"CSAT:{csat} SLA:{ticket.get('fr_escalated', False)} "
-        f"Reopen:{ticket.get('nr_escalated', False)}\n\n"
+        f"Reopen:{ticket.get('nr_escalated', False)} "
+        f"Tags:{','.join(tags) if tags else 'none'}\n\n"
+        f"{sf_context}"
         f"CONVERSATION:\n{trimmed}\n\n"
         f"Score the agent 1-5 for each category. total_score = avg_of_8 × 20.\n\n"
         f"CHURN RISK — set churn_risk_flag:true ONLY if the customer EXPLICITLY states:\n"

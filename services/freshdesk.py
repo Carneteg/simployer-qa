@@ -251,6 +251,26 @@ def detect_churn(thread: List[Dict]) -> Optional[str]:
     return next((kw for kw in CHURN_KEYWORDS if kw in customer_text), None)
 
 
+def is_confirmed_churn(ticket: Dict) -> bool:
+    """
+    Returns True if the ticket carries a 'salesforce' tag.
+
+    Business rule (from data analysis):
+      A ticket tagged 'salesforce' that also carries churn_risk_flag=True means
+      the customer has ACTUALLY terminated their contract — this is a confirmed
+      termination event, not a predicted/suspected churn risk.
+
+      The Salesforce tag is applied by the CRM integration when a contract
+      termination has been recorded in Salesforce for that customer.
+
+    This is distinct from keyword or AI-inferred churn risk:
+      - Suspected churn  : keyword match or Claude inference (may be wrong)
+      - Confirmed churn  : salesforce tag present = contract terminated (ground truth)
+    """
+    tags = [t.lower().strip() for t in (ticket.get("tags") or [])]
+    return "salesforce" in tags
+
+
 def frt_minutes(ticket: Dict) -> Optional[int]:
     """First response time in minutes."""
     try:
