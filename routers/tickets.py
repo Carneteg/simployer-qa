@@ -26,7 +26,7 @@ class TicketOut(BaseModel):
     complexity: Optional[str]
     churn_risk_flag: bool
     churn_risk_reason: Optional[str]
-    churn_confirmed: bool          # True when salesforce tag present — contract terminated
+    churn_confirmed: bool = False  # True when salesforce tag present — contract terminated
     contact_problem_flag: bool
     coaching_tip: Optional[str]
     summary: Optional[str]
@@ -34,9 +34,9 @@ class TicketOut(BaseModel):
     strengths: Optional[List[str]]
     improvements: Optional[List[str]]
     # CX proxy fields
-    msg_count: Optional[int]       # total messages in thread
-    cx_bad: bool                   # bad CX = contact_problem OR high_msgs OR churn_flag
-    cx_signals: Optional[List[str]] # which signals fired
+    msg_count: Optional[int] = None    # total messages in thread
+    cx_bad: bool = False               # bad CX = contact_problem OR high_msgs OR churn_flag
+    cx_signals: Optional[List[str]] = None  # which signals fired
 
 
 @router.get("/", response_model=List[TicketOut])
@@ -72,6 +72,7 @@ async def list_tickets(
             Evaluation.msg_count,
             Evaluation.cx_bad,
             Evaluation.cx_signals,
+            Evaluation.churn_confirmed,
         )
         .join(Evaluation, and_(
             Evaluation.ticket_id == Ticket.id,
@@ -115,6 +116,7 @@ async def list_tickets(
             msg_count=r["msg_count"],
             cx_bad=bool(r["cx_bad"]) if r["cx_bad"] is not None else False,
             cx_signals=r["cx_signals"] or [],
+            churn_confirmed=bool(r["churn_confirmed"]) if r.get("churn_confirmed") is not None else False,
         )
         for r in rows
     ]

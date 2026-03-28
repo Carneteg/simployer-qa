@@ -156,7 +156,7 @@ async def eval_ticket(ticket: Dict, thread: List[Dict], retries: int = 5) -> Dic
             response = await asyncio.wait_for(
                 _client.messages.create(
                     model="claude-haiku-4-5-20251001",
-                    max_tokens=1200,
+                    max_tokens=1600,  # increased from 1200 — was causing JSON truncation (625/890 errors)
                     temperature=0,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": prompt}],
