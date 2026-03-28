@@ -126,6 +126,65 @@ async def explain_queries(user: User = Depends(current_user), db: AsyncSession =
     return results
 
 
+@router.get("/cx-stats")
+async def cx_stats(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    """
+    CX proxy score summary across all evaluated tickets.
+    Bad CX = contact_problem_flag OR msg_count > 2 OR churn_risk_flag.
+    Shows mismatch between high QA scores and bad CX reality.
+    """
+    from sqlalchemy import select, func, case, and_
+    from models import Ticket, Evaluation
+
+    result = await db.execute(
+        select(
+            func.count(Evaluation.id).label("total"),
+            func.sum(case((Evaluation.cx_bad == True, 1), else_=0)).label("cx_bad_count"),
+            func.sum(case((
+                and_(Evaluation.cx_bad == True, Evaluation.total_score > 75), 1
+            ), else_=0)).label("mismatch_count"),
+            func.sum(case((Evaluation.churn_confirmed == True, 1), else_=0)).label("confirmed_churn"),
+            func.round(func.avg(
+                case((Evaluation.cx_bad == True, Evaluation.total_score), else_=None)
+            ), 1).label("avg_score_bad_cx"),
+            func.round(func.avg(
+                case((Evaluation.cx_bad == False, Evaluation.total_score), else_=None)
+            ), 1).label("avg_score_good_cx"),
+        )
+        .where(Evaluation.user_id == user.id)
+    )
+    row = result.mappings().first()
+    if not row or not row["total"]:
+        return {"error": "No evaluations found — run an analysis first"}
+
+    total       = int(row["total"])
+    cx_bad      = int(row["cx_bad_count"] or 0)
+    mismatch    = int(row["mismatch_count"] or 0)
+    confirmed   = int(row["confirmed_churn"] or 0)
+
+    return {
+        "total_tickets":        total,
+        "cx_bad_count":         cx_bad,
+        "cx_bad_pct":           round(cx_bad / total * 100, 1),
+        "cx_good_count":        total - cx_bad,
+        "cx_good_pct":          round((total - cx_bad) / total * 100, 1),
+        "mismatch_count":       mismatch,
+        "mismatch_pct_of_bad":  round(mismatch / cx_bad * 100, 1) if cx_bad else 0,
+        "confirmed_churn":      confirmed,
+        "avg_score_bad_cx":     float(row["avg_score_bad_cx"] or 0),
+        "avg_score_good_cx":    float(row["avg_score_good_cx"] or 0),
+        "qa_cx_gap":            round(
+            float(row["avg_score_good_cx"] or 0) -
+            float(row["avg_score_bad_cx"] or 0), 1
+        ),
+        "note": (
+            "mismatch = tickets where cx_bad=True AND total_score>75. "
+            "These are high-QA tickets with bad CX reality — "
+            "the core signal this feature was built to detect."
+        ),
+    }
+
+
 @router.get("/n1-audit")
 async def n1_audit():
     """

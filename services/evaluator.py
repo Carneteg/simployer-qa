@@ -98,6 +98,11 @@ async def _process_ticket(
             churn_kw        = detect_churn(thread)
             churn_confirmed = is_confirmed_churn(ticket)
 
+            # CX proxy — computed from thread length before Claude call
+            # Stored on the evaluation so the dashboard can query it directly
+            # without fetching messages per ticket on every load.
+            _msg_count = len(thread)
+
             created_at  = _dt(ticket.get("created_at"))
             updated_at  = _dt(ticket.get("updated_at"))
             resolved_at = _dt((ticket.get("stats") or {}).get("resolved_at"))
@@ -164,6 +169,24 @@ async def _process_ticket(
                         Evaluation.run_id    == run_id_uuid,
                     )
                 )
+                # ── CX proxy computation ─────────────────────────────────────────
+                # Requires both thread (msg_count) and eval result (churn/contact flags)
+                # computed after Claude returns so all three signals are available.
+                _churn_flag = bool(
+                    churn_confirmed or
+                    ev.get("churn_risk_flag") or
+                    (churn_kw and (ev.get("total_score") or 100) < 70)
+                )
+                _contact_flag = bool(ev.get("contact_problem_flag"))
+                _high_msgs    = _msg_count > 2
+
+                _cx_signals = []
+                if _contact_flag:            _cx_signals.append("contact_problem")
+                if _high_msgs:               _cx_signals.append("high_msgs")
+                if _churn_flag:              _cx_signals.append("churn_flag")
+
+                _cx_bad = bool(_cx_signals)   # bad CX if any signal fired
+
                 db.add(Evaluation(
                     ticket_id=ticket_id,
                     user_id=user_id,
@@ -196,11 +219,16 @@ async def _process_ticket(
                         ev.get("churn_risk_reason") or
                         (f'Signal: "{churn_kw}"' if churn_kw else None)
                     ),
-                    contact_problem_flag=bool(ev.get("contact_problem_flag")),
+                    contact_problem_flag=_contact_flag,
                     coaching_tip=ev.get("coaching_tip"),
                     strengths=ev.get("strengths"),
                     improvements=ev.get("improvements"),
                     scores=ev.get("scores"),
+                    # CX proxy fields
+                    msg_count=_msg_count,
+                    cx_bad=_cx_bad,
+                    cx_signals=_cx_signals if _cx_signals else None,
+                    churn_confirmed=churn_confirmed,
                 ))
                 await db.commit()
 

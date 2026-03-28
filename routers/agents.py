@@ -40,6 +40,9 @@ async def list_agents(
             func.sum(
                 case((Evaluation.churn_risk_flag == True, 1), else_=0)
             ).label("churn_count"),
+            func.sum(
+                case((Evaluation.cx_bad == True, 1), else_=0)
+            ).label("cx_bad_count"),
         )
         .join(Evaluation, and_(
             Evaluation.ticket_id == Ticket.id,
@@ -59,6 +62,10 @@ async def list_agents(
             "ticket_count": r["ticket_count"],
             "avg_score": float(r["avg_score"] or 0),
             "churn_count": int(r["churn_count"] or 0),
+            "cx_bad_count": int(r["cx_bad_count"] or 0),
+            "cx_bad_pct": round(
+                int(r["cx_bad_count"] or 0) / int(r["ticket_count"] or 1) * 100, 1
+            ),
             "tier": (
                 "🟢 Top" if float(r["avg_score"] or 0) >= 75
                 else "🟡 Solid" if float(r["avg_score"] or 0) >= 65

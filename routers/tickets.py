@@ -33,12 +33,17 @@ class TicketOut(BaseModel):
     scores: Optional[dict]
     strengths: Optional[List[str]]
     improvements: Optional[List[str]]
+    # CX proxy fields
+    msg_count: Optional[int]       # total messages in thread
+    cx_bad: bool                   # bad CX = contact_problem OR high_msgs OR churn_flag
+    cx_signals: Optional[List[str]] # which signals fired
 
 
 @router.get("/", response_model=List[TicketOut])
 async def list_tickets(
     run_id: Optional[uuid.UUID] = Query(None),
     churn_only: bool = Query(False),
+    cx_bad_only: bool = Query(False),
     limit: int = Query(100, le=1000),
     offset: int = Query(0),
     user: User = Depends(current_user),
@@ -64,6 +69,9 @@ async def list_tickets(
             Evaluation.scores,
             Evaluation.strengths,
             Evaluation.improvements,
+            Evaluation.msg_count,
+            Evaluation.cx_bad,
+            Evaluation.cx_signals,
         )
         .join(Evaluation, and_(
             Evaluation.ticket_id == Ticket.id,
@@ -76,6 +84,8 @@ async def list_tickets(
         q = q.where(Evaluation.run_id == run_id)
     if churn_only:
         q = q.where(Evaluation.churn_risk_flag == True)
+    if cx_bad_only:
+        q = q.where(Evaluation.cx_bad == True)
 
     q = q.order_by(Evaluation.total_score.asc()).limit(limit).offset(offset)
 
@@ -102,6 +112,9 @@ async def list_tickets(
             scores=r["scores"],
             strengths=r["strengths"],
             improvements=r["improvements"],
+            msg_count=r["msg_count"],
+            cx_bad=bool(r["cx_bad"]) if r["cx_bad"] is not None else False,
+            cx_signals=r["cx_signals"] or [],
         )
         for r in rows
     ]

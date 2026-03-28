@@ -120,11 +120,18 @@ class Evaluation(Base):
     summary:               Mapped[Optional[str]]      = mapped_column(Text)
     churn_risk_flag:       Mapped[bool]               = mapped_column(Boolean, default=False)
     churn_risk_reason:     Mapped[Optional[str]]      = mapped_column(Text)
+    churn_confirmed:       Mapped[bool]               = mapped_column(Boolean, default=False)
     contact_problem_flag:  Mapped[bool]               = mapped_column(Boolean, default=False)
     coaching_tip:          Mapped[Optional[str]]      = mapped_column(Text)
     strengths:             Mapped[Optional[List[str]]] = mapped_column(ARRAY(String))
     improvements:          Mapped[Optional[List[str]]] = mapped_column(ARRAY(String))
     scores:                Mapped[Optional[dict]]     = mapped_column(JSONB)
+    # ── CX proxy fields ───────────────────────────────────────────────────────
+    # Computed at evaluation time from thread length + churn + contact signals.
+    # Bad CX = contact_problem_flag OR msg_count > 2 OR churn_risk_flag
+    msg_count:             Mapped[Optional[int]]      = mapped_column(Integer)
+    cx_bad:                Mapped[bool]               = mapped_column(Boolean, default=False)
+    cx_signals:            Mapped[Optional[List[str]]] = mapped_column(ARRAY(String))
     created_at:            Mapped[datetime]           = mapped_column(DateTime(timezone=True), default=utcnow)
 
     run: Mapped["Run"] = relationship("Run", back_populates="evaluations")
