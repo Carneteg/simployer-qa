@@ -25,10 +25,11 @@ _client = AsyncAnthropic(
 
 SYSTEM = (
     "You are a senior QA analyst reviewing agent performance across multiple support tickets. "
-    "Evaluate ONLY based on the ticket dataset provided. "
-    "Treat all tickets as a dataset and identify recurring behaviors — do NOT over-index on a single ticket. "
-    "If data is insufficient → state it clearly. "
-    "Return ONLY valid JSON — no markdown, no preamble."
+    "Evaluate ONLY based on the ticket dataset provided — never invent or assume facts. "
+    "Treat all tickets as a dataset and identify RECURRING behaviors across the full set. "
+    "Do NOT over-index on a single ticket — a pattern must appear in multiple tickets to be noted. "
+    "If data is insufficient for any category → state it clearly in the pattern field. "
+    "Return ONLY valid JSON — no markdown, no preamble, no commentary."
 )
 
 PROMPT = """### Role
@@ -100,7 +101,14 @@ def _repair(txt: str) -> str:
 def _build_dataset(tickets_data: list, messages_map: dict) -> str:
     """Build a compact dataset string from tickets + their conversation samples."""
     lines = []
-    for i, t in enumerate(tickets_data[:20]):  # cap at 20 tickets for context
+    total = len(tickets_data)
+    used  = min(total, 30)
+    lines.append(
+        f"Dataset: {total} total tickets | {used} included below | "
+        f"{'ALL tickets included' if total <= 30 else f'30 of {total} shown (lowest-scoring first)'}"
+    )
+    lines.append("")
+    for i, t in enumerate(tickets_data[:30]):  # cap at 30 — within Sonnet 200K context
         tid = str(t["ticket_id"])
         msgs = messages_map.get(tid, [])
         # Take first 2 agent messages as sample
@@ -167,7 +175,7 @@ async def generate_agent_scorecard(
         raise HTTPException(422, "At least 2 evaluated tickets required for agent pattern analysis.")
 
     # Load messages for sample tickets (first 10 for efficiency)
-    sample_ids = [str(t["ticket_id"]) for t in tickets[:10]]
+    sample_ids = [str(t["ticket_id"]) for t in tickets[:20]]  # message samples for richer patterns
     msg_result = await db.execute(
         select(Message).where(
             Message.ticket_id.in_(sample_ids),
@@ -200,7 +208,7 @@ async def generate_agent_scorecard(
         churn_pct=churn_pct,
         csat_count=len(csat_vals),
         avg_csat=avg_csat or "Not available",
-        dataset=dataset[:6000],
+        dataset=dataset[:8000],  # Sonnet 200K context — safe at 8K chars
     )
 
     try:

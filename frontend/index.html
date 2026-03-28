@@ -361,6 +361,32 @@ tbody td{padding:7px 9px;vertical-align:top}
     <button class="btn btn-primary" style="width:auto;margin:0" onclick="runAgentScorecard()" id="agrev-btn" disabled>
       ✦ Generate Agent Scorecard
     </button>
+    <!-- Empty state / template preview -->
+    <div id="agrev-empty" style="margin-top:22px">
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;opacity:.45;pointer-events:none;user-select:none">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:180px">Category</th>
+              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score 1–5</th>
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pattern observed in tickets</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${["Consistency","Product Knowledge","Communication Quality","Tone & Empathy","Ownership","Efficiency","Problem-Solving Ability","Repeat Contact Prevention","Trust Building","Customer Care Maturity"].map(label =>
+              `<tr style="border-bottom:1px solid rgba(42,42,61,.2)">
+                <td style="padding:7px 12px;font-size:11px">${label}</td>
+                <td style="padding:7px 12px;text-align:center"><span style="display:inline-block;width:28px;height:14px;border-radius:4px;background:var(--bdr)"></span></td>
+                <td style="padding:7px 12px"><span style="display:inline-block;width:${120+Math.random()*80|0}px;height:10px;border-radius:4px;background:var(--bdr)"></span></td>
+              </tr>`
+            ).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--dim)">
+        Select an agent and click Generate to produce the full pattern analysis
+      </div>
+    </div>
     <div id="agrev-result" style="margin-top:22px;display:none"></div>
   </div>
 </div>
@@ -1158,6 +1184,14 @@ async function showAgent(name) {
             <div style="font-size:10px;color:var(--dim);margin-top:2px">Bad CX</div>
           </div>` : ''}
         </div>
+        <!-- Scorecard CTA -->
+        <div style="margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center"
+            onclick="launchAgentScorecard('${data.agent_name.replace(/'/g,&quot;\'&quot;)}')">
+            ✦ Generate Full Scorecard — pattern analysis across all tickets
+          </button>
+        </div>
+
         <!-- Risk profile badge -->
         ${(()=>{
           const churnPct = data.ticket_count>0 ? data.churn_count/data.ticket_count*100 : 0;
@@ -1546,6 +1580,20 @@ async function doExport(fmt, churnOnly = false) {
 // ═══════════════════════════════════════════════════════════
 // AGENT REVIEW
 // ═══════════════════════════════════════════════════════════
+function launchAgentScorecard(agentName) {
+  // Navigate to Agent Review tab and pre-select the agent
+  showTab('agrev');
+  const sel = document.getElementById('agrev-agent');
+  if (sel) {
+    sel.value = agentName;
+    agrevOnSelect();
+    // Scroll generate button into view
+    setTimeout(() => {
+      document.getElementById('agrev-btn')?.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 150);
+  }
+}
+
 function agrevInit() {
   // Populate agent dropdown from _evals
   const sel = document.getElementById('agrev-agent');
@@ -1600,6 +1648,8 @@ function agrevOnSelect() {
   }
 
   document.getElementById('agrev-result').style.display = 'none';
+  const emptyEl2 = document.getElementById('agrev-empty');
+  if (emptyEl2) emptyEl2.style.display = 'block';
 }
 
 async function runAgentScorecard() {
@@ -1611,6 +1661,8 @@ async function runAgentScorecard() {
   btn.disabled = true;
   btn.innerHTML = '<div class="sp"></div> Analysing patterns with Claude Sonnet...';
   document.getElementById('agrev-result').style.display = 'none';
+  const emptyEl2 = document.getElementById('agrev-empty');
+  if (emptyEl2) emptyEl2.style.display = 'block';
 
   try {
     const r = await apiFetch('/agent-scorecard/', {
@@ -1714,6 +1766,9 @@ function renderAgentScorecard(d) {
   const el = document.getElementById('agrev-result');
   el.innerHTML = innerHTML;
   el.style.display = 'block';
+  // Hide the empty template
+  const emptyEl = document.getElementById('agrev-empty');
+  if (emptyEl) emptyEl.style.display = 'none';
   el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
