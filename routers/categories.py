@@ -77,31 +77,42 @@ async def list_categories(
 
     # PostgreSQL unnest() expands the tags array into individual rows.
     # We join Ticket → Evaluation and aggregate per unnested tag.
+    # Use DISTINCT ON to get only the LATEST evaluation per ticket (by id desc).
+    # Without this, tickets evaluated in multiple runs are counted multiple times,
+    # inflating churn_count past the number of distinct tickets (churn_pct > 100%).
     sql = text("""
+        WITH latest_evals AS (
+            SELECT DISTINCT ON (ticket_id, user_id)
+                ticket_id,
+                user_id,
+                churn_risk_flag
+            FROM evaluations
+            WHERE user_id = :user_id
+            ORDER BY ticket_id, user_id, id DESC
+        )
         SELECT
             tag,
-            COUNT(DISTINCT t.id)                                      AS volume,
-            SUM(CASE WHEN e.churn_risk_flag THEN 1 ELSE 0 END)       AS churn_count,
+            COUNT(DISTINCT t.id)                                           AS volume,
+            SUM(CASE WHEN le.churn_risk_flag THEN 1 ELSE 0 END)           AS churn_count,
             SUM(CASE
-                    WHEN e.churn_risk_flag AND t.arr IS NOT NULL
+                    WHEN le.churn_risk_flag AND t.arr IS NOT NULL
                     THEN t.arr ELSE 0
-                END)                                                  AS arr_at_risk_sum,
-            SUM(CASE
-                    WHEN e.churn_risk_flag AND t.arr IS NOT NULL
-                    AND t.company_id IS NOT NULL THEN 1 ELSE 0
-                END)                                                  AS companies_at_risk,
-            -- flag: is ANY arr populated at all for churn tickets in this tag?
-            BOOL_OR(
-                e.churn_risk_flag AND t.arr IS NOT NULL
-            )                                                         AS has_arr_data
+                END)                                                       AS arr_at_risk_sum,
+            COUNT(DISTINCT CASE
+                    WHEN le.churn_risk_flag AND t.arr IS NOT NULL
+                    AND t.company_id IS NOT NULL THEN t.company_id
+                END)                                                       AS companies_at_risk,
+            BOOL_OR(le.churn_risk_flag AND t.arr IS NOT NULL)             AS has_arr_data
         FROM tickets t
-        JOIN evaluations e ON e.ticket_id = t.id AND e.user_id = t.user_id
+        JOIN latest_evals le ON le.ticket_id = t.id AND le.user_id = t.user_id
         CROSS JOIN LATERAL UNNEST(COALESCE(t.tags, ARRAY[]::text[])) AS tag
         WHERE t.user_id = :user_id
         GROUP BY tag
         HAVING COUNT(DISTINCT t.id) >= :min_tickets
-        ORDER BY (SUM(CASE WHEN e.churn_risk_flag THEN 1 ELSE 0 END)::float /
-                  NULLIF(COUNT(DISTINCT t.id), 0)) DESC
+        ORDER BY (
+            SUM(CASE WHEN le.churn_risk_flag THEN 1 ELSE 0 END)::float
+            / NULLIF(COUNT(DISTINCT t.id), 0)
+        ) DESC
     """)
 
     result = await db.execute(sql, {"user_id": str(user.id), "min_tickets": MIN_TICKETS})
@@ -146,36 +157,34 @@ async def list_groups(
 
     t0 = time.time()
 
-    result = await db.execute(
-        select(
-            func.coalesce(Ticket.group_name, "Unknown").label("group_name"),
-            func.count(Ticket.id.distinct()).label("volume"),
-            func.sum(
-                case((Evaluation.churn_risk_flag == True, 1), else_=0)
-            ).label("churn_count"),
-            func.sum(
-                case(
-                    (and_(Evaluation.churn_risk_flag == True,
-                          Ticket.arr != None), Ticket.arr),
-                    else_=0,
-                )
-            ).label("arr_at_risk_sum"),
-            func.bool_or(
-                and_(Evaluation.churn_risk_flag == True, Ticket.arr != None)
-            ).label("has_arr_data"),
+    # Same DISTINCT ON pattern: one latest eval per ticket
+    grp_sql = text("""
+        WITH latest_evals AS (
+            SELECT DISTINCT ON (ticket_id, user_id)
+                ticket_id, user_id, churn_risk_flag
+            FROM evaluations
+            WHERE user_id = :user_id
+            ORDER BY ticket_id, user_id, id DESC
         )
-        .join(Evaluation, and_(
-            Evaluation.ticket_id == Ticket.id,
-            Evaluation.user_id   == Ticket.user_id,
-        ))
-        .where(Ticket.user_id == user.id)
-        .group_by(func.coalesce(Ticket.group_name, "Unknown"))
-        .order_by(
-            (func.sum(case((Evaluation.churn_risk_flag == True, 1), else_=0))
-             / func.nullif(func.count(Ticket.id.distinct()), 0)
-            ).desc()
-        )
-    )
+        SELECT
+            COALESCE(t.group_name, 'Unknown')                              AS group_name,
+            COUNT(DISTINCT t.id)                                           AS volume,
+            SUM(CASE WHEN le.churn_risk_flag THEN 1 ELSE 0 END)           AS churn_count,
+            SUM(CASE
+                    WHEN le.churn_risk_flag AND t.arr IS NOT NULL
+                    THEN t.arr ELSE 0
+                END)                                                       AS arr_at_risk_sum,
+            BOOL_OR(le.churn_risk_flag AND t.arr IS NOT NULL)             AS has_arr_data
+        FROM tickets t
+        JOIN latest_evals le ON le.ticket_id = t.id AND le.user_id = t.user_id
+        WHERE t.user_id = :user_id
+        GROUP BY COALESCE(t.group_name, 'Unknown')
+        ORDER BY (
+            SUM(CASE WHEN le.churn_risk_flag THEN 1 ELSE 0 END)::float
+            / NULLIF(COUNT(DISTINCT t.id), 0)
+        ) DESC
+    """)
+    result = await db.execute(grp_sql, {"user_id": str(user.id)})
     rows = result.mappings().all()
     ms = round((time.time() - t0) * 1000)
     logger.info(f"groups aggregation: {len(rows)} groups in {ms}ms")
