@@ -446,6 +446,545 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div id="modal-body"></div>
 </div></div>
 
+<!-- CATEGORIES -->
+<div class="tab-content" id="tab-cat">
+  <div style="max-width:900px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <button class="btn btn-primary btn-sm" id="cat-btn-tags"
+          onclick="setCatView('tags')" style="margin-right:6px">By Tag</button>
+        <button class="btn btn-outline btn-sm" id="cat-btn-groups"
+          onclick="setCatView('groups')">By Group</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="cat-meta">—</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="cat-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="text-align:left;border-bottom:2px solid var(--bdr)">
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;min-width:160px">Category</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Volume</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Flags</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Risk %</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:center">Risk Level</th>
+            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">ARR at Risk</th>
+          </tr>
+        </thead>
+        <tbody id="cat-tbody">
+          <tr><td colspan="6" style="padding:24px;text-align:center;color:var(--dim)">Select Categories tab to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="cat-top5" style="margin-top:18px"></div>
+    <details style="margin-top:18px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+      <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+        <span>&#x2139;&#xFE0F;</span> How is this measured?
+        <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+      </summary>
+      <div style="padding:14px;font-size:12px;line-height:1.8;color:var(--dim)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Data source</div>
+            <p style="margin:0 0 8px">Aggregates all evaluated tickets for the current loaded dataset. Tags come from Freshdesk ticket fields. Each ticket may carry multiple tags and is counted once per tag. Minimum 5 tickets per tag to be included.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Volume</div>
+            <p style="margin:0 0 8px">Distinct tickets with this tag that have a QA evaluation. Tags below 5 tickets are excluded as statistically unreliable.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Churn Risk %</div>
+            <p style="margin:0 0 8px">Churn-flagged tickets / total tickets in this category x 100. Three-tier churn detection: Salesforce CRM tag (confirmed termination) &gt; Claude AI inference (explicit cancellation intent) &gt; specific keyword + QA score &lt;70. Team baseline: 18.6%.</p>
+          </div>
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Risk Level thresholds</div>
+            <ul style="margin:0 0 8px;padding-left:16px">
+              <li><strong>High</strong> &#8212; churn rate &ge;30%</li>
+              <li><strong>Med</strong> &#8212; churn rate 15&ndash;29.9%</li>
+              <li><strong>Low</strong> &#8212; churn rate &lt;15%</li>
+            </ul>
+            <p style="margin:0 0 8px">Absolute thresholds, not relative to the team baseline. Always read volume and rate together &#8212; a low-volume category with a 90% rate may have only 5 tickets.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">ARR at Risk</div>
+            <p style="margin:0 0 8px">Sum of ARR for companies with churn-flagged tickets in this category, counted once per unique company. ARR is fetched from the Freshdesk company record at evaluation time. Shows [ARR unknown] when no ARR data was available for churn tickets in this category.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Top 5</div>
+            <p style="margin:0">The 5 rows with the highest churn rate are highlighted with a left-border accent. Note that the highest churn rate is not always the highest business risk &#8212; also consider volume and ARR.</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- QA SUMMARY -->
+<div class="tab-content" id="tab-qas">
+  <div style="max-width:860px;margin:0 auto">
+
+    <!-- Controls bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <button class="btn btn-primary" onclick="renderQaS(true)" id="qas-btn">
+          ✦ Generate QA Summary
+        </button>
+        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="qas-meta"></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="qas-stamp"></div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="qas-loading" style="display:none;padding:40px;text-align:center">
+      <div class="sp" style="margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is reading your QA data…</div>
+    </div>
+
+    <!-- Error state -->
+    <div id="qas-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty state -->
+    <div id="qas-empty" style="padding:40px;text-align:center;color:var(--dim)">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Leadership QA Summary</div>
+      <div style="font-size:13px;line-height:1.7;max-width:420px;margin:0 auto">
+        Generates a data-grounded summary for management: overall quality level,
+        strengths, weaknesses, customer and operational risk, coaching needs,
+        and a scalability verdict.
+      </div>
+      <button class="btn btn-primary" onclick="renderQaS(true)" style="margin-top:16px">
+        ✦ Generate Summary
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="qas-result" style="display:none">
+
+      <!-- KPI strip -->
+      <div id="qas-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px"></div>
+
+      <!-- QA Summary table -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:16px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">QA Summary</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody id="qas-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Executive Summary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">
+          📊 Executive Summary
+        </div>
+        <ul id="qas-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
+      </div>
+
+      <!-- Management Verdict -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:16px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
+          Management Verdict
+        </div>
+        <p id="qas-verdict" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- QA Dimension breakdown -->
+      <details style="border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+          📐 QA Dimension Breakdown
+          <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+        </summary>
+        <div id="qas-dims" style="padding:14px"></div>
+      </details>
+
+      <!-- Regenerate note -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderQaS(true)">Regenerate fresh</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- IMPROVEMENTS -->
+<div class="tab-content" id="tab-imp">
+  <div style="max-width:900px;margin:0 auto">
+
+    <!-- Controls -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <button class="btn btn-primary" onclick="renderImp(true)" id="imp-btn">
+          ✦ Generate Improvement Plan
+        </button>
+        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="imp-meta"></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="imp-stamp"></div>
+    </div>
+
+    <!-- Loading -->
+    <div id="imp-loading" style="display:none;padding:40px;text-align:center">
+      <div class="sp" style="margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is identifying improvement areas…</div>
+    </div>
+
+    <!-- Error -->
+    <div id="imp-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty state -->
+    <div id="imp-empty" style="padding:40px;text-align:center;color:var(--dim)">
+      <div style="font-size:40px;margin-bottom:12px">🎯</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Improvement Recommendations</div>
+      <div style="font-size:13px;line-height:1.7;max-width:460px;margin:0 auto">
+        Generates a concrete, evidence-based action plan for the Head of Customer Care.
+        Separates agent behaviour issues, knowledge/process gaps, and system/operational
+        problems. Includes STOP/START/CONTINUE framework and leadership commentary.
+      </div>
+      <button class="btn btn-primary" onclick="renderImp(true)" style="margin-top:16px">
+        ✦ Generate Improvement Plan
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="imp-result" style="display:none">
+
+      <!-- Priority table -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Improvement Recommendations</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:65px">Priority</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:100px">Type</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:140px">Area</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Effort</th>
+              </tr>
+            </thead>
+            <tbody id="imp-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- STOP / START / CONTINUE -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="imp-ssc"></div>
+
+      <!-- Leadership commentary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
+          Leadership Commentary
+        </div>
+        <p id="imp-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Regenerate -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderImp(true)">Regenerate fresh</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- FULL QA ANALYSIS -->
+<div class="tab-content" id="tab-fqa">
+  <div style="max-width:920px;margin:0 auto">
+
+    <!-- Controls -->
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:16px">
+      <div>
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Ticket ID</label>
+        <input id="fqa-tid" type="text" placeholder="e.g. 63511"
+          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none"
+          onkeydown="if(event.key==='Enter')runFqa()"/>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Run (optional)</label>
+        <select id="fqa-run"
+          style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;height:38px">
+          <option value="">All runs</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="runFqa()" id="fqa-btn" style="height:38px;margin:0">
+        ✦ Run Full Analysis
+      </button>
+    </div>
+
+    <!-- Shortcut: launch from ticket modal -->
+    <div style="font-size:11px;color:var(--dim);margin-bottom:14px">
+      Or click any ticket → <strong>Full Analysis</strong> button in the ticket detail.
+    </div>
+
+    <!-- Loading -->
+    <div id="fqa-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is running the full QA engine — ticket scorecard, agent scorecard, summary, improvements…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 15–25 seconds</div>
+    </div>
+
+    <!-- Error -->
+    <div id="fqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty -->
+    <div id="fqa-empty" style="padding:48px;text-align:center;color:var(--dim)">
+      <div style="font-size:42px;margin-bottom:14px">🔬</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">Full QA Analysis</div>
+      <div style="font-size:13px;line-height:1.8;max-width:500px;margin:0 auto">
+        Enter a Ticket ID to produce a combined analysis covering all 4 sections:<br>
+        <strong>Ticket scorecard · Agent scorecard · Team summary · Improvement plan</strong><br>
+        plus STOP/START/CONTINUE and a Final Leadership Comment.
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div id="fqa-result" style="display:none">
+
+      <!-- Header strip -->
+      <div id="fqa-header" style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"></div>
+
+      <!-- ── Section 1: Ticket Scorecard ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">1. Ticket QA Scorecard</span>
+          <span id="fqa-t-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
+              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Evidence from this ticket</th>
+            </tr></thead>
+            <tbody id="fqa-t-tbody"></tbody>
+          </table>
+        </div>
+        <div id="fqa-t-sw" style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid var(--bdr)"></div>
+      </div>
+
+      <!-- ── Section 2: Agent Scorecard ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">2. Agent QA Scorecard</span>
+          <span id="fqa-a-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
+              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
+              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pattern across tickets</th>
+            </tr></thead>
+            <tbody id="fqa-a-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Section 3: Summary ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">3. Summary</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody id="fqa-sum-tbody"></tbody>
+        </table>
+        <div style="padding:12px 14px;border-top:1px solid var(--bdr)">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Executive Bullets</div>
+          <ul id="fqa-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
+        </div>
+      </div>
+
+      <!-- ── Section 4: Improvements + SSC ── -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">4. Improvements</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:70px">Priority</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:130px">Area</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
+              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:65px">Effort</th>
+            </tr></thead>
+            <tbody id="fqa-imp-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SSC -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="fqa-ssc"></div>
+
+      <!-- Leadership Comment -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Final Leadership Comment</div>
+        <p id="fqa-leadership" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Re-run -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        <span style="cursor:pointer;text-decoration:underline" onclick="runFqa()">Run again with same ticket</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE QA ANALYSIS -->
+<div class="tab-content" id="tab-iqa">
+  <div style="max-width:880px;margin:0 auto">
+
+    <!-- Input form -->
+    <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+      <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">🔍 Issue QA Analysis</span>
+      </div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">Issue / Problem Description <span style="color:var(--danger)">*</span></label>
+          <textarea id="iqa-issue" rows="4" placeholder="Describe the issue as reported — e.g. 'Users cannot log in. Hitting submit on the login form produces no response. Started ~30 min ago.'"
+            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;color:var(--txt);font-size:13px;line-height:1.6;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit"
+          ></textarea>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">System Context <span style="color:var(--dim);font-weight:400">(optional)</span></label>
+          <input id="iqa-ctx" type="text" placeholder="e.g. FastAPI + PostgreSQL + Redis, deployed on Render, last deploy 2h ago"
+            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:9px 12px;color:var(--txt);font-size:13px;outline:none;box-sizing:border-box"
+          />
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="runIqa()" id="iqa-btn">
+            ✦ Analyse Issue
+          </button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="iqa-quick">
+            <span style="font-size:11px;color:var(--dim)">Quick fill:</span>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Users cannot log in — the login form submit button does nothing. No error message. Started ~20 min ago.')">Login issue</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('The QA evaluation run started but has been stuck at 0% for 15 minutes. No progress, no errors visible in the UI.')">Run stuck</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Dashboard is showing data from yesterday, not the latest run that completed 2 hours ago.')">Stale data</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Getting 500 Internal Server Error on the /tickets endpoint. Other endpoints work fine.')">500 error</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="iqa-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Senior QA Manager is analysing the issue…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 10–20 seconds</div>
+    </div>
+
+    <!-- Error -->
+    <div id="iqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
+
+    <!-- Result -->
+    <div id="iqa-result" style="display:none">
+
+      <!-- Issue preview banner -->
+      <div id="iqa-banner" style="padding:10px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;font-size:12px;margin-bottom:16px;line-height:1.6"></div>
+
+      <!-- Step 1: Issue Breakdown -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 1 — Issue Breakdown</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Area</th>
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Could Be Wrong</th>
+          </tr></thead>
+          <tbody id="iqa-breakdown"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 2: Reproduction Strategy -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 2 — Reproduction Strategy</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:40px">#</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Expected Result</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:90px">Risk</th>
+          </tr></thead>
+          <tbody id="iqa-repro"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 3: Functional Test Coverage -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 3 — Functional Test Coverage</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Function</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What to Test</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:100px">Assumed Risk</th>
+          </tr></thead>
+          <tbody id="iqa-coverage"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 4: Root Causes -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 4 — Likely Root Causes</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Priority</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Root Cause</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Reasoning</th>
+          </tr></thead>
+          <tbody id="iqa-causes"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 5: Debugging Actions -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 5 — Debugging Actions</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:110px">Owner</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Why</th>
+          </tr></thead>
+          <tbody id="iqa-debug"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 6: QA Verdict -->
+      <div id="iqa-verdict-card" style="border-radius:10px;overflow:hidden;margin-bottom:14px;border:1px solid var(--bdr)">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 6 — QA Verdict</span>
+        </div>
+        <div id="iqa-verdict" style="padding:14px;display:flex;gap:20px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- Step 7: Leadership Commentary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Step 7 — Leadership Commentary</div>
+        <p id="iqa-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Missing info -->
+      <div id="iqa-missing-wrap" style="display:none;padding:12px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚠ Missing Information Needed</div>
+        <ul id="iqa-missing" style="margin:0;padding-left:18px;font-size:12px;line-height:1.8"></ul>
+      </div>
+
+      <!-- Re-run -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        <span style="cursor:pointer;text-decoration:underline" onclick="runIqa()">Analyse again</span>
+        &nbsp;·&nbsp;
+        <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('iqa-issue').value='';document.getElementById('iqa-result').style.display='none';">Clear</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // CONFIG
@@ -1780,69 +2319,7 @@ function renderAgentScorecard(d) {
   el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-<!-- CATEGORIES -->
-<div class="tab-content" id="tab-cat">
-  <div style="max-width:900px;margin:0 auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div>
-        <button class="btn btn-primary btn-sm" id="cat-btn-tags"
-          onclick="setCatView('tags')" style="margin-right:6px">By Tag</button>
-        <button class="btn btn-outline btn-sm" id="cat-btn-groups"
-          onclick="setCatView('groups')">By Group</button>
-      </div>
-      <div style="font-size:11px;color:var(--dim)" id="cat-meta">—</div>
-    </div>
-    <div style="overflow-x:auto">
-      <table id="cat-table" style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="text-align:left;border-bottom:2px solid var(--bdr)">
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;min-width:160px">Category</th>
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Volume</th>
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Flags</th>
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">Churn Risk %</th>
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:center">Risk Level</th>
-            <th style="padding:8px 10px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:right">ARR at Risk</th>
-          </tr>
-        </thead>
-        <tbody id="cat-tbody">
-          <tr><td colspan="6" style="padding:24px;text-align:center;color:var(--dim)">Select Categories tab to load.</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div id="cat-top5" style="margin-top:18px"></div>
-    <details style="margin-top:18px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
-      <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
-        <span>&#x2139;&#xFE0F;</span> How is this measured?
-        <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
-      </summary>
-      <div style="padding:14px;font-size:12px;line-height:1.8;color:var(--dim)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
-          <div>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Data source</div>
-            <p style="margin:0 0 8px">Aggregates all evaluated tickets for the current loaded dataset. Tags come from Freshdesk ticket fields. Each ticket may carry multiple tags and is counted once per tag. Minimum 5 tickets per tag to be included.</p>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Volume</div>
-            <p style="margin:0 0 8px">Distinct tickets with this tag that have a QA evaluation. Tags below 5 tickets are excluded as statistically unreliable.</p>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Churn Risk %</div>
-            <p style="margin:0 0 8px">Churn-flagged tickets / total tickets in this category x 100. Three-tier churn detection: Salesforce CRM tag (confirmed termination) &gt; Claude AI inference (explicit cancellation intent) &gt; specific keyword + QA score &lt;70. Team baseline: 18.6%.</p>
-          </div>
-          <div>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Risk Level thresholds</div>
-            <ul style="margin:0 0 8px;padding-left:16px">
-              <li><strong>High</strong> &#8212; churn rate &ge;30%</li>
-              <li><strong>Med</strong> &#8212; churn rate 15&ndash;29.9%</li>
-              <li><strong>Low</strong> &#8212; churn rate &lt;15%</li>
-            </ul>
-            <p style="margin:0 0 8px">Absolute thresholds, not relative to the team baseline. Always read volume and rate together &#8212; a low-volume category with a 90% rate may have only 5 tickets.</p>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">ARR at Risk</div>
-            <p style="margin:0 0 8px">Sum of ARR for companies with churn-flagged tickets in this category, counted once per unique company. ARR is fetched from the Freshdesk company record at evaluation time. Shows [ARR unknown] when no ARR data was available for churn tickets in this category.</p>
-            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Top 5</div>
-            <p style="margin:0">The 5 rows with the highest churn rate are highlighted with a left-border accent. Note that the highest churn rate is not always the highest business risk &#8212; also consider volume and ARR.</p>
-          </div>
-        </div>
-      </div>
-    </details>
-  </div>
-</div>
+
 
 // ═══════════════════════════════════════════════════════════
 // CATEGORIES
@@ -1959,93 +2436,7 @@ function _renderCatRows({ rows, minTickets }) {
 }
 
 
-<!-- QA SUMMARY -->
-<div class="tab-content" id="tab-qas">
-  <div style="max-width:860px;margin:0 auto">
 
-    <!-- Controls bar -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div>
-        <button class="btn btn-primary" onclick="renderQaS(true)" id="qas-btn">
-          ✦ Generate QA Summary
-        </button>
-        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="qas-meta"></span>
-      </div>
-      <div style="font-size:11px;color:var(--dim)" id="qas-stamp"></div>
-    </div>
-
-    <!-- Loading state -->
-    <div id="qas-loading" style="display:none;padding:40px;text-align:center">
-      <div class="sp" style="margin:0 auto 12px"></div>
-      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is reading your QA data…</div>
-    </div>
-
-    <!-- Error state -->
-    <div id="qas-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
-
-    <!-- Empty state -->
-    <div id="qas-empty" style="padding:40px;text-align:center;color:var(--dim)">
-      <div style="font-size:40px;margin-bottom:12px">📋</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Leadership QA Summary</div>
-      <div style="font-size:13px;line-height:1.7;max-width:420px;margin:0 auto">
-        Generates a data-grounded summary for management: overall quality level,
-        strengths, weaknesses, customer and operational risk, coaching needs,
-        and a scalability verdict.
-      </div>
-      <button class="btn btn-primary" onclick="renderQaS(true)" style="margin-top:16px">
-        ✦ Generate Summary
-      </button>
-    </div>
-
-    <!-- Result -->
-    <div id="qas-result" style="display:none">
-
-      <!-- KPI strip -->
-      <div id="qas-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px"></div>
-
-      <!-- QA Summary table -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:16px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">QA Summary</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-          <tbody id="qas-table-body"></tbody>
-        </table>
-      </div>
-
-      <!-- Executive Summary -->
-      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">
-          📊 Executive Summary
-        </div>
-        <ul id="qas-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
-      </div>
-
-      <!-- Management Verdict -->
-      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:16px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
-          Management Verdict
-        </div>
-        <p id="qas-verdict" style="font-size:13px;line-height:1.9;margin:0"></p>
-      </div>
-
-      <!-- QA Dimension breakdown -->
-      <details style="border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:14px">
-        <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
-          📐 QA Dimension Breakdown
-          <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
-        </summary>
-        <div id="qas-dims" style="padding:14px"></div>
-      </details>
-
-      <!-- Regenerate note -->
-      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
-        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderQaS(true)">Regenerate fresh</span>
-      </div>
-
-    </div>
-  </div>
-</div>
 
 // ═══════════════════════════════════════════════════════════
 // QA SUMMARY
@@ -2187,88 +2578,7 @@ function _dimBar(dim, avg, color) {
 }
 
 
-<!-- IMPROVEMENTS -->
-<div class="tab-content" id="tab-imp">
-  <div style="max-width:900px;margin:0 auto">
 
-    <!-- Controls -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div>
-        <button class="btn btn-primary" onclick="renderImp(true)" id="imp-btn">
-          ✦ Generate Improvement Plan
-        </button>
-        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="imp-meta"></span>
-      </div>
-      <div style="font-size:11px;color:var(--dim)" id="imp-stamp"></div>
-    </div>
-
-    <!-- Loading -->
-    <div id="imp-loading" style="display:none;padding:40px;text-align:center">
-      <div class="sp" style="margin:0 auto 12px"></div>
-      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is identifying improvement areas…</div>
-    </div>
-
-    <!-- Error -->
-    <div id="imp-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
-
-    <!-- Empty state -->
-    <div id="imp-empty" style="padding:40px;text-align:center;color:var(--dim)">
-      <div style="font-size:40px;margin-bottom:12px">🎯</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Improvement Recommendations</div>
-      <div style="font-size:13px;line-height:1.7;max-width:460px;margin:0 auto">
-        Generates a concrete, evidence-based action plan for the Head of Customer Care.
-        Separates agent behaviour issues, knowledge/process gaps, and system/operational
-        problems. Includes STOP/START/CONTINUE framework and leadership commentary.
-      </div>
-      <button class="btn btn-primary" onclick="renderImp(true)" style="margin-top:16px">
-        ✦ Generate Improvement Plan
-      </button>
-    </div>
-
-    <!-- Result -->
-    <div id="imp-result" style="display:none">
-
-      <!-- Priority table -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Improvement Recommendations</span>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead>
-              <tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:65px">Priority</th>
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:100px">Type</th>
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:140px">Area</th>
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
-                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Effort</th>
-              </tr>
-            </thead>
-            <tbody id="imp-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- STOP / START / CONTINUE -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="imp-ssc"></div>
-
-      <!-- Leadership commentary -->
-      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
-          Leadership Commentary
-        </div>
-        <p id="imp-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
-      </div>
-
-      <!-- Regenerate -->
-      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
-        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderImp(true)">Regenerate fresh</span>
-      </div>
-
-    </div>
-  </div>
-</div>
 
 // ═══════════════════════════════════════════════════════════
 // IMPROVEMENTS
@@ -2384,150 +2694,7 @@ function _renderImp(d) {
   document.getElementById('imp-commentary').textContent = d.leadership_commentary || '';
 }
 
-<!-- FULL QA ANALYSIS -->
-<div class="tab-content" id="tab-fqa">
-  <div style="max-width:920px;margin:0 auto">
 
-    <!-- Controls -->
-    <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:16px">
-      <div>
-        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Ticket ID</label>
-        <input id="fqa-tid" type="text" placeholder="e.g. 63511"
-          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
-                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none"
-          onkeydown="if(event.key==='Enter')runFqa()"/>
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Run (optional)</label>
-        <select id="fqa-run"
-          style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
-                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none;height:38px">
-          <option value="">All runs</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" onclick="runFqa()" id="fqa-btn" style="height:38px;margin:0">
-        ✦ Run Full Analysis
-      </button>
-    </div>
-
-    <!-- Shortcut: launch from ticket modal -->
-    <div style="font-size:11px;color:var(--dim);margin-bottom:14px">
-      Or click any ticket → <strong>Full Analysis</strong> button in the ticket detail.
-    </div>
-
-    <!-- Loading -->
-    <div id="fqa-loading" style="display:none;padding:48px;text-align:center">
-      <div class="sp" style="margin:0 auto 14px"></div>
-      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is running the full QA engine — ticket scorecard, agent scorecard, summary, improvements…</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 15–25 seconds</div>
-    </div>
-
-    <!-- Error -->
-    <div id="fqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
-
-    <!-- Empty -->
-    <div id="fqa-empty" style="padding:48px;text-align:center;color:var(--dim)">
-      <div style="font-size:42px;margin-bottom:14px">🔬</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px">Full QA Analysis</div>
-      <div style="font-size:13px;line-height:1.8;max-width:500px;margin:0 auto">
-        Enter a Ticket ID to produce a combined analysis covering all 4 sections:<br>
-        <strong>Ticket scorecard · Agent scorecard · Team summary · Improvement plan</strong><br>
-        plus STOP/START/CONTINUE and a Final Leadership Comment.
-      </div>
-    </div>
-
-    <!-- Result -->
-    <div id="fqa-result" style="display:none">
-
-      <!-- Header strip -->
-      <div id="fqa-header" style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"></div>
-
-      <!-- ── Section 1: Ticket Scorecard ── -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">1. Ticket QA Scorecard</span>
-          <span id="fqa-t-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
-              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
-              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
-              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Evidence from this ticket</th>
-            </tr></thead>
-            <tbody id="fqa-t-tbody"></tbody>
-          </table>
-        </div>
-        <div id="fqa-t-sw" style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid var(--bdr)"></div>
-      </div>
-
-      <!-- ── Section 2: Agent Scorecard ── -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">2. Agent QA Scorecard</span>
-          <span id="fqa-a-score" style="font-family:var(--mono);font-size:14px;font-weight:800"></span>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
-              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:170px">Category</th>
-              <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;width:70px">Score</th>
-              <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pattern across tickets</th>
-            </tr></thead>
-            <tbody id="fqa-a-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ── Section 3: Summary ── -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">3. Summary</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-          <tbody id="fqa-sum-tbody"></tbody>
-        </table>
-        <div style="padding:12px 14px;border-top:1px solid var(--bdr)">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Executive Bullets</div>
-          <ul id="fqa-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
-        </div>
-      </div>
-
-      <!-- ── Section 4: Improvements + SSC ── -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">4. Improvements</span>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
-              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:70px">Priority</th>
-              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:130px">Area</th>
-              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
-              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
-              <th style="padding:7px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:65px">Effort</th>
-            </tr></thead>
-            <tbody id="fqa-imp-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- SSC -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="fqa-ssc"></div>
-
-      <!-- Leadership Comment -->
-      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Final Leadership Comment</div>
-        <p id="fqa-leadership" style="font-size:13px;line-height:1.9;margin:0"></p>
-      </div>
-
-      <!-- Re-run -->
-      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
-        <span style="cursor:pointer;text-decoration:underline" onclick="runFqa()">Run again with same ticket</span>
-      </div>
-    </div>
-  </div>
-</div>
 
 // ═══════════════════════════════════════════════════════════
 // FULL QA ANALYSIS
@@ -2753,163 +2920,7 @@ function _renderFqa(d) {
   document.getElementById('fqa-result').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-<!-- ISSUE QA ANALYSIS -->
-<div class="tab-content" id="tab-iqa">
-  <div style="max-width:880px;margin:0 auto">
 
-    <!-- Input form -->
-    <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
-      <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
-        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">🔍 Issue QA Analysis</span>
-      </div>
-      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
-        <div>
-          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">Issue / Problem Description <span style="color:var(--danger)">*</span></label>
-          <textarea id="iqa-issue" rows="4" placeholder="Describe the issue as reported — e.g. 'Users cannot log in. Hitting submit on the login form produces no response. Started ~30 min ago.'"
-            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;color:var(--txt);font-size:13px;line-height:1.6;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit"
-          ></textarea>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">System Context <span style="color:var(--dim);font-weight:400">(optional)</span></label>
-          <input id="iqa-ctx" type="text" placeholder="e.g. FastAPI + PostgreSQL + Redis, deployed on Render, last deploy 2h ago"
-            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:9px 12px;color:var(--txt);font-size:13px;outline:none;box-sizing:border-box"
-          />
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="runIqa()" id="iqa-btn">
-            ✦ Analyse Issue
-          </button>
-          <div style="display:flex;gap:6px;flex-wrap:wrap" id="iqa-quick">
-            <span style="font-size:11px;color:var(--dim)">Quick fill:</span>
-            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Users cannot log in — the login form submit button does nothing. No error message. Started ~20 min ago.')">Login issue</button>
-            <button class="btn btn-outline btn-sm" onclick="iqaQuick('The QA evaluation run started but has been stuck at 0% for 15 minutes. No progress, no errors visible in the UI.')">Run stuck</button>
-            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Dashboard is showing data from yesterday, not the latest run that completed 2 hours ago.')">Stale data</button>
-            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Getting 500 Internal Server Error on the /tickets endpoint. Other endpoints work fine.')">500 error</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div id="iqa-loading" style="display:none;padding:48px;text-align:center">
-      <div class="sp" style="margin:0 auto 14px"></div>
-      <div style="font-size:13px;color:var(--dim)">Senior QA Manager is analysing the issue…</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 10–20 seconds</div>
-    </div>
-
-    <!-- Error -->
-    <div id="iqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
-
-    <!-- Result -->
-    <div id="iqa-result" style="display:none">
-
-      <!-- Issue preview banner -->
-      <div id="iqa-banner" style="padding:10px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;font-size:12px;margin-bottom:16px;line-height:1.6"></div>
-
-      <!-- Step 1: Issue Breakdown -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 1 — Issue Breakdown</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
-            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Area</th>
-            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Could Be Wrong</th>
-          </tr></thead>
-          <tbody id="iqa-breakdown"></tbody>
-        </table>
-      </div>
-
-      <!-- Step 2: Reproduction Strategy -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 2 — Reproduction Strategy</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:40px">#</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Expected Result</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:90px">Risk</th>
-          </tr></thead>
-          <tbody id="iqa-repro"></tbody>
-        </table>
-      </div>
-
-      <!-- Step 3: Functional Test Coverage -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 3 — Functional Test Coverage</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Function</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What to Test</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:100px">Assumed Risk</th>
-          </tr></thead>
-          <tbody id="iqa-coverage"></tbody>
-        </table>
-      </div>
-
-      <!-- Step 4: Root Causes -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 4 — Likely Root Causes</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Priority</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Root Cause</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Reasoning</th>
-          </tr></thead>
-          <tbody id="iqa-causes"></tbody>
-        </table>
-      </div>
-
-      <!-- Step 5: Debugging Actions -->
-      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 5 — Debugging Actions</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:110px">Owner</th>
-            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Why</th>
-          </tr></thead>
-          <tbody id="iqa-debug"></tbody>
-        </table>
-      </div>
-
-      <!-- Step 6: QA Verdict -->
-      <div id="iqa-verdict-card" style="border-radius:10px;overflow:hidden;margin-bottom:14px;border:1px solid var(--bdr)">
-        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 6 — QA Verdict</span>
-        </div>
-        <div id="iqa-verdict" style="padding:14px;display:flex;gap:20px;flex-wrap:wrap"></div>
-      </div>
-
-      <!-- Step 7: Leadership Commentary -->
-      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Step 7 — Leadership Commentary</div>
-        <p id="iqa-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
-      </div>
-
-      <!-- Missing info -->
-      <div id="iqa-missing-wrap" style="display:none;padding:12px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;margin-bottom:14px">
-        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚠ Missing Information Needed</div>
-        <ul id="iqa-missing" style="margin:0;padding-left:18px;font-size:12px;line-height:1.8"></ul>
-      </div>
-
-      <!-- Re-run -->
-      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
-        <span style="cursor:pointer;text-decoration:underline" onclick="runIqa()">Analyse again</span>
-        &nbsp;·&nbsp;
-        <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('iqa-issue').value='';document.getElementById('iqa-result').style.display='none';">Clear</span>
-      </div>
-    </div>
-  </div>
-</div>
 
 // ═══════════════════════════════════════════════════════════
 // ISSUE QA ANALYSIS
