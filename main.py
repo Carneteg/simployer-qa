@@ -30,12 +30,48 @@ if settings.sentry_dsn:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Always ensure tables exist (safe to run multiple times - CREATE TABLE IF NOT EXISTS)
+    # ── 1. Ensure tables exist ────────────────────────────────────────────────
     try:
         await init_db()
         logger.info("DB tables initialised")
     except Exception as e:
         logger.warning(f"init_db skipped: {e}")
+
+    # ── 2. Stale run watchdog ─────────────────────────────────────────────────
+    # On free tier, the process can be killed mid-run (sleep / OOM / deploy).
+    # Any run still 'running' when we boot was interrupted — mark it failed so
+    # users see a clear signal and know to restart rather than waiting forever.
+    try:
+        from sqlalchemy import select, update
+        from datetime import datetime, timezone, timedelta
+        from database import AsyncSessionLocal
+        from models import Run
+
+        async with AsyncSessionLocal() as db:
+            # Mark runs stuck in 'running' as failed
+            stale = await db.execute(
+                select(Run).where(Run.status == "running")
+            )
+            stale_runs = stale.scalars().all()
+            for run in stale_runs:
+                run.status    = "failed"
+                run.error     = (
+                    "Run interrupted — the server was restarted or the instance "
+                    "slept while this run was in progress. Start a new run to retry."
+                )
+                run.finished_at = datetime.now(timezone.utc)
+                logger.warning(
+                    f"Watchdog: marked stale run {run.id} as failed "
+                    f"(was running since {run.started_at})"
+                )
+            if stale_runs:
+                await db.commit()
+                logger.info(f"Watchdog: {len(stale_runs)} stale run(s) marked failed")
+            else:
+                logger.info("Watchdog: no stale runs found")
+    except Exception as e:
+        logger.error(f"Watchdog failed: {e}")
+
     yield
 
 

@@ -27,6 +27,7 @@ class RunOut(BaseModel):
     tickets_done: int
     churn_count: int
     error: Optional[str]
+    telemetry: Optional[dict]     # populated when status == done
     created_at: str
     started_at: Optional[str]
     finished_at: Optional[str]
@@ -36,6 +37,19 @@ class RunOut(BaseModel):
 
     @classmethod
     def from_orm(cls, run: Run):
+        import json as _json
+        # error field doubles as telemetry store when run is done
+        telemetry = None
+        error_msg = run.error
+        if run.status == "done" and run.error:
+            try:
+                parsed = _json.loads(run.error)
+                if "telemetry" in parsed:
+                    telemetry = parsed["telemetry"]
+                    error_msg = None   # don't surface telemetry as an error
+            except Exception:
+                pass
+
         return cls(
             id=run.id,
             status=run.status,
@@ -43,7 +57,8 @@ class RunOut(BaseModel):
             tickets_total=run.tickets_total,
             tickets_done=run.tickets_done,
             churn_count=run.churn_count,
-            error=run.error,
+            error=error_msg,
+            telemetry=telemetry,
             created_at=str(run.created_at or ""),
             started_at=str(run.started_at) if run.started_at else None,
             finished_at=str(run.finished_at) if run.finished_at else None,
