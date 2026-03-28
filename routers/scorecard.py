@@ -1,3 +1,4 @@
+import asyncio
 """
 Ticket scorecard — works from tickets already stored in the DB.
 Uses the stored conversation thread + ticket metadata as the ONLY source of truth.
@@ -17,7 +18,11 @@ from models import User, Ticket, Message, Evaluation
 from routers.auth import current_user
 
 router = APIRouter()
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+# 30s hard timeout — surface as HTTP 504 rather than hanging indefinitely
+_client = AsyncAnthropic(
+    api_key=settings.anthropic_api_key,
+    timeout=30.0,
+)
 
 SYSTEM = (
     "You are a senior Quality Assurance analyst in Customer Care. "
@@ -150,13 +155,22 @@ async def generate_scorecard(
         thread=thread[:5000],
     )
 
-    response = await _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        temperature=0,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = await asyncio.wait_for(
+            _client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2000,
+                temperature=0,
+                system=SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Scorecard generation timed out (>30s). Try a shorter ticket or retry."
+        )
     raw = response.content[0].text
     data = json.loads(_repair(raw))
 

@@ -52,6 +52,9 @@ app.add_middleware(
 # ── Request logging ───────────────────────────────────────────────────────────
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Skip logging for health — keeps it pure in-memory, <5ms
+    if request.url.path == "/health":
+        return await call_next(request)
     t0 = time.time()
     response = await call_next(request)
     ms = round((time.time() - t0) * 1000)

@@ -1,3 +1,5 @@
+import logging
+import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, and_, func, case
@@ -8,6 +10,7 @@ from models import Ticket, Evaluation, User
 from routers.auth import current_user
 
 router = APIRouter()
+logger = logging.getLogger("simployer.agents")
 
 CATS = [
     "clarity_structure", "tone_professionalism", "empathy", "accuracy",
@@ -20,6 +23,7 @@ async def list_agents(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    t0 = time.time()
     result = await db.execute(
         select(
             Ticket.agent_name,
@@ -36,9 +40,11 @@ async def list_agents(
         ))
         .where(Ticket.user_id == user.id)
         .group_by(Ticket.agent_name, Ticket.group_name)
-        .order_by(func.avg(Evaluation.total_score).asc())
+        .order_by(func.avg(Evaluation.total_score).asc())  # index ix_evals_user_score_churn covers this
     )
     rows = result.mappings().all()
+    ms = round((time.time() - t0) * 1000)
+    logger.info(f"agents aggregation: {len(rows)} agents in {ms}ms")
     return [
         {
             "agent_name": r["agent_name"],

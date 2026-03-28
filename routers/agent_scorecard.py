@@ -1,3 +1,4 @@
+import asyncio
 """
 Agent QA Scorecard — evaluates an agent across ALL their tickets as a dataset.
 Uses Claude Sonnet with strict data-context rules (no invented facts).
@@ -16,7 +17,11 @@ from models import User, Ticket, Evaluation, Message
 from routers.auth import current_user
 
 router = APIRouter()
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+# 30s hard timeout — surface as HTTP 504 rather than hanging indefinitely
+_client = AsyncAnthropic(
+    api_key=settings.anthropic_api_key,
+    timeout=30.0,
+)
 
 SYSTEM = (
     "You are a senior QA analyst reviewing agent performance across multiple support tickets. "
@@ -198,13 +203,22 @@ async def generate_agent_scorecard(
         dataset=dataset[:6000],
     )
 
-    response = await _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2500,
-        temperature=0,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = await asyncio.wait_for(
+            _client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2500,
+                temperature=0,
+                system=SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Scorecard generation timed out (>30s). Try a shorter ticket or retry."
+        )
     raw = response.content[0].text
     data = json.loads(_repair(raw))
 
