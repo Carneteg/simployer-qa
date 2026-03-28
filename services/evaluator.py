@@ -39,7 +39,7 @@ from services.claude import eval_ticket
 logger = logging.getLogger("simployer.evaluator")
 
 # ── Concurrency config (Starter plan: 0.5 CPU) ───────────────────────────────
-CLAUDE_CONCURRENCY = 4    # 4 simultaneous Haiku calls — Anthropic Haiku rate limit
+CLAUDE_CONCURRENCY = 2    # 2 simultaneous Haiku calls — stay within Haiku TPM limit
 BATCH_SIZE         = 20   # Tickets processed per asyncio.gather batch
 
 
