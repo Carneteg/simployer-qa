@@ -172,6 +172,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('score')">Manual Review</div>
   <div class="tab" onclick="showTab('agrev')">Agent Review</div>
   <div class="tab" onclick="showTab('cat')">Categories</div>
+  <div class="tab" onclick="showTab('qas')">QA Summary</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -784,7 +785,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -804,13 +805,14 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
   if (id === 'runs') loadRunHistory();
   if (id === 'exp')  loadRunsForExport();
   if (id === 'cat')  renderCat();
+  if (id === 'qas')  renderQaS();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -1948,6 +1950,234 @@ function _renderCatRows({ rows, minTickets }) {
       </div>
       ${totalTopArr > 0 ? `<div style="margin-top:10px;font-size:12px;color:var(--dim)">Combined ARR at risk in top 5: <strong style="color:var(--warn)">NOK ${totalTopArr.toLocaleString('nb-NO', {maximumFractionDigits:0})}</strong> (${arrKnown.length}/${top5.length} categories have ARR data)</div>` : ''}
     </div>`;
+}
+
+
+<!-- QA SUMMARY -->
+<div class="tab-content" id="tab-qas">
+  <div style="max-width:860px;margin:0 auto">
+
+    <!-- Controls bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <button class="btn btn-primary" onclick="renderQaS(true)" id="qas-btn">
+          ✦ Generate QA Summary
+        </button>
+        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="qas-meta"></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="qas-stamp"></div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="qas-loading" style="display:none;padding:40px;text-align:center">
+      <div class="sp" style="margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is reading your QA data…</div>
+    </div>
+
+    <!-- Error state -->
+    <div id="qas-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty state -->
+    <div id="qas-empty" style="padding:40px;text-align:center;color:var(--dim)">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Leadership QA Summary</div>
+      <div style="font-size:13px;line-height:1.7;max-width:420px;margin:0 auto">
+        Generates a data-grounded summary for management: overall quality level,
+        strengths, weaknesses, customer and operational risk, coaching needs,
+        and a scalability verdict.
+      </div>
+      <button class="btn btn-primary" onclick="renderQaS(true)" style="margin-top:16px">
+        ✦ Generate Summary
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="qas-result" style="display:none">
+
+      <!-- KPI strip -->
+      <div id="qas-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px"></div>
+
+      <!-- QA Summary table -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:16px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">QA Summary</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody id="qas-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Executive Summary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">
+          📊 Executive Summary
+        </div>
+        <ul id="qas-exec" style="margin:0;padding-left:18px;line-height:2"></ul>
+      </div>
+
+      <!-- Management Verdict -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:16px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
+          Management Verdict
+        </div>
+        <p id="qas-verdict" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- QA Dimension breakdown -->
+      <details style="border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+          📐 QA Dimension Breakdown
+          <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+        </summary>
+        <div id="qas-dims" style="padding:14px"></div>
+      </details>
+
+      <!-- Regenerate note -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderQaS(true)">Regenerate fresh</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+// ═══════════════════════════════════════════════════════════
+// QA SUMMARY
+// ═══════════════════════════════════════════════════════════
+let _qasSummary = null;
+
+async function renderQaS(force = false) {
+  if (_qasSummary && !force) { _renderQaS(_qasSummary); return; }
+
+  document.getElementById('qas-empty').style.display   = 'none';
+  document.getElementById('qas-result').style.display  = 'none';
+  document.getElementById('qas-error').style.display   = 'none';
+  document.getElementById('qas-loading').style.display = 'block';
+  document.getElementById('qas-btn').disabled = true;
+  document.getElementById('qas-btn').innerHTML = '<div class="sp"></div> Generating…';
+
+  try {
+    const data = await apiFetch('/qa-summary/', {method: 'POST'});
+    if (!data) throw new Error('Empty response');
+    if (data.detail) throw new Error(data.detail);
+    _qasSummary = data;
+    _renderQaS(data);
+  } catch(err) {
+    document.getElementById('qas-loading').style.display = 'none';
+    document.getElementById('qas-error').style.display   = 'block';
+    document.getElementById('qas-error').textContent     = 'Error: ' + err.message;
+    document.getElementById('qas-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('qas-btn').disabled  = false;
+    document.getElementById('qas-btn').innerHTML = '✦ Generate QA Summary';
+  }
+}
+
+function _renderQaS(d) {
+  document.getElementById('qas-loading').style.display = 'none';
+  document.getElementById('qas-empty').style.display   = 'none';
+  document.getElementById('qas-error').style.display   = 'none';
+  document.getElementById('qas-result').style.display  = 'block';
+
+  const meta = d.meta || {};
+  const scoreColor = v => v >= 75 ? 'var(--ok)' : v >= 55 ? 'var(--warn)' : 'var(--danger)';
+
+  // Timestamp
+  document.getElementById('qas-stamp').textContent =
+    'Generated ' + new Date().toLocaleTimeString('nb-NO', {hour:'2-digit',minute:'2-digit'});
+
+  // Meta bar
+  document.getElementById('qas-meta').textContent =
+    `${meta.total_tickets} tickets · avg ${meta.avg_score}/100 · ${meta.churn_pct}% churn · ${meta.high_risk_agents} high-risk agents`;
+
+  // ── KPI strip ──────────────────────────────────────────────────────────────
+  const kpis = [
+    {label:'Avg QA Score',   val:`${meta.avg_score}/100`,  color: scoreColor(meta.avg_score)},
+    {label:'Churn Rate',     val:`${meta.churn_pct}%`,     color: meta.churn_pct > 20 ? 'var(--danger)' : meta.churn_pct > 12 ? 'var(--warn)' : 'var(--ok)'},
+    {label:'Confirmed Exits',val:`${meta.confirmed_churn}`, color: meta.confirmed_churn > 0 ? 'var(--danger)' : 'var(--ok)'},
+    {label:'ARR at Risk',    val: meta.arr_at_risk > 0 ? 'NOK ' + (meta.arr_at_risk/1000000).toFixed(1) + 'M' : '—', color:'var(--warn)'},
+    {label:'Bad CX Rate',    val:`${meta.cx_bad_pct}%`,    color: meta.cx_bad_pct > 35 ? 'var(--danger)' : 'var(--warn)'},
+    {label:'High-Risk Agents',val:`${meta.high_risk_agents}/${meta.agent_total}`, color: meta.high_risk_agents > 3 ? 'var(--danger)' : 'var(--warn)'},
+  ];
+  document.getElementById('qas-kpis').innerHTML = kpis.map(k => `
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;text-align:center">
+      <div style="font-family:var(--mono);font-size:16px;font-weight:800;color:${k.color}">${k.val}</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:3px">${k.label}</div>
+    </div>`).join('');
+
+  // ── QA table ───────────────────────────────────────────────────────────────
+  const QA_ROWS = [
+    ['overall_quality_level', 'Overall quality level'],
+    ['main_strengths',        'Main strengths'],
+    ['main_weaknesses',       'Main weaknesses'],
+    ['customer_risk',         'Customer risk'],
+    ['operational_risk',      'Operational risk'],
+    ['coaching_need',         'Coaching need'],
+    ['recommended_next_step', 'Recommended next step'],
+  ];
+  const RISK_BG = {
+    'customer_risk':    'rgba(248,113,113,.05)',
+    'operational_risk': 'rgba(248,113,113,.05)',
+    'coaching_need':    'rgba(251,191,36,.06)',
+    'recommended_next_step': 'rgba(91,106,240,.06)',
+  };
+  const tbl = d.qa_table || {};
+  document.getElementById('qas-table-body').innerHTML = QA_ROWS.map(([key, label]) => `
+    <tr style="border-bottom:1px solid var(--bdr);background:${RISK_BG[key]||'transparent'}">
+      <td style="padding:11px 14px;font-size:11px;font-weight:700;font-family:var(--mono);color:var(--dim);
+                 white-space:nowrap;vertical-align:top;width:170px;text-transform:uppercase;
+                 letter-spacing:.05em">${label}</td>
+      <td style="padding:11px 14px;font-size:13px;line-height:1.7">${tbl[key] || '—'}</td>
+    </tr>`).join('');
+
+  // ── Executive Summary ──────────────────────────────────────────────────────
+  const bullets = (d.executive_summary || []).filter(Boolean);
+  document.getElementById('qas-exec').innerHTML = bullets.map(b =>
+    `<li style="font-size:13px;line-height:1.7;margin-bottom:4px">${b}</li>`
+  ).join('');
+
+  // ── Management Verdict ─────────────────────────────────────────────────────
+  document.getElementById('qas-verdict').textContent = d.management_verdict || '';
+
+  // ── QA Dimension breakdown ─────────────────────────────────────────────────
+  const dimLow  = (meta.dim_lowest  || []);
+  const dimHigh = (meta.dim_highest || []);
+  const allDims = [...dimLow.map(x=>({...x, side:'low'})), ...dimHigh.map(x=>({...x, side:'high'}))];
+
+  document.getElementById('qas-dims').innerHTML =
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--danger);text-transform:uppercase;
+                    letter-spacing:.8px;margin-bottom:8px">▼ Lowest dimensions</div>
+        ${dimLow.map(([dim,avg]) => _dimBar(dim, avg, 'var(--danger)')).join('')}
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--ok);text-transform:uppercase;
+                    letter-spacing:.8px;margin-bottom:8px">▲ Highest dimensions</div>
+        ${dimHigh.map(([dim,avg]) => _dimBar(dim, avg, 'var(--ok)')).join('')}
+      </div>
+    </div>`;
+}
+
+function _dimBar(dim, avg, color) {
+  const DIM_LABEL = {
+    clarity:'Clarity & Structure', clarity_structure:'Clarity & Structure',
+    tone:'Tone & Professionalism', tone_professionalism:'Tone & Professionalism',
+    empathy:'Empathy', accuracy:'Accuracy',
+    resolution_quality:'Resolution Quality', efficiency:'Efficiency',
+    ownership:'Ownership', commercial_awareness:'Commercial Awareness',
+  };
+  const label = DIM_LABEL[dim] || dim;
+  const pct   = (avg / 5 * 100).toFixed(0);
+  return `<div style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+      <span>${label}</span>
+      <span style="font-family:var(--mono);font-weight:700;color:${color}">${avg}/5</span>
+    </div>
+    <div style="height:5px;background:var(--bdr);border-radius:3px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+    </div>
+  </div>`;
 }
 
 
