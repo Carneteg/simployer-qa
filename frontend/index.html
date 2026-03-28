@@ -175,6 +175,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('qas')">QA Summary</div>
   <div class="tab" onclick="showTab('imp')">Improvements</div>
   <div class="tab" onclick="showTab('fqa')">Full Analysis</div>
+  <div class="tab" onclick="showTab('iqa')">Issue Analysis</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -787,7 +788,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -807,7 +808,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -817,6 +818,7 @@ function showTab(id) {
   if (id === 'qas')  renderQaS();
   if (id === 'imp')  renderImp();
   if (id === 'fqa')  fqaInit();
+  if (id === 'iqa')  iqaInit();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -2749,6 +2751,315 @@ function _renderFqa(d) {
 
   // Scroll to result
   document.getElementById('fqa-result').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+<!-- ISSUE QA ANALYSIS -->
+<div class="tab-content" id="tab-iqa">
+  <div style="max-width:880px;margin:0 auto">
+
+    <!-- Input form -->
+    <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+      <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">🔍 Issue QA Analysis</span>
+      </div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">Issue / Problem Description <span style="color:var(--danger)">*</span></label>
+          <textarea id="iqa-issue" rows="4" placeholder="Describe the issue as reported — e.g. 'Users cannot log in. Hitting submit on the login form produces no response. Started ~30 min ago.'"
+            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;color:var(--txt);font-size:13px;line-height:1.6;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit"
+          ></textarea>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">System Context <span style="color:var(--dim);font-weight:400">(optional)</span></label>
+          <input id="iqa-ctx" type="text" placeholder="e.g. FastAPI + PostgreSQL + Redis, deployed on Render, last deploy 2h ago"
+            style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:9px 12px;color:var(--txt);font-size:13px;outline:none;box-sizing:border-box"
+          />
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="runIqa()" id="iqa-btn">
+            ✦ Analyse Issue
+          </button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="iqa-quick">
+            <span style="font-size:11px;color:var(--dim)">Quick fill:</span>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Users cannot log in — the login form submit button does nothing. No error message. Started ~20 min ago.')">Login issue</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('The QA evaluation run started but has been stuck at 0% for 15 minutes. No progress, no errors visible in the UI.')">Run stuck</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Dashboard is showing data from yesterday, not the latest run that completed 2 hours ago.')">Stale data</button>
+            <button class="btn btn-outline btn-sm" onclick="iqaQuick('Getting 500 Internal Server Error on the /tickets endpoint. Other endpoints work fine.')">500 error</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="iqa-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Senior QA Manager is analysing the issue…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 10–20 seconds</div>
+    </div>
+
+    <!-- Error -->
+    <div id="iqa-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
+
+    <!-- Result -->
+    <div id="iqa-result" style="display:none">
+
+      <!-- Issue preview banner -->
+      <div id="iqa-banner" style="padding:10px 14px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:8px;font-size:12px;margin-bottom:16px;line-height:1.6"></div>
+
+      <!-- Step 1: Issue Breakdown -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 1 — Issue Breakdown</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Area</th>
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Could Be Wrong</th>
+          </tr></thead>
+          <tbody id="iqa-breakdown"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 2: Reproduction Strategy -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 2 — Reproduction Strategy</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:40px">#</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Expected Result</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:90px">Risk</th>
+          </tr></thead>
+          <tbody id="iqa-repro"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 3: Functional Test Coverage -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 3 — Functional Test Coverage</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Function</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What to Test</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:100px">Assumed Risk</th>
+          </tr></thead>
+          <tbody id="iqa-coverage"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 4: Root Causes -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 4 — Likely Root Causes</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Priority</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Root Cause</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Reasoning</th>
+          </tr></thead>
+          <tbody id="iqa-causes"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 5: Debugging Actions -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 5 — Debugging Actions</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--bdr);background:var(--s2)">
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:110px">Owner</th>
+            <th style="padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Why</th>
+          </tr></thead>
+          <tbody id="iqa-debug"></tbody>
+        </table>
+      </div>
+
+      <!-- Step 6: QA Verdict -->
+      <div id="iqa-verdict-card" style="border-radius:10px;overflow:hidden;margin-bottom:14px;border:1px solid var(--bdr)">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Step 6 — QA Verdict</span>
+        </div>
+        <div id="iqa-verdict" style="padding:14px;display:flex;gap:20px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- Step 7: Leadership Commentary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Step 7 — Leadership Commentary</div>
+        <p id="iqa-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Missing info -->
+      <div id="iqa-missing-wrap" style="display:none;padding:12px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚠ Missing Information Needed</div>
+        <ul id="iqa-missing" style="margin:0;padding-left:18px;font-size:12px;line-height:1.8"></ul>
+      </div>
+
+      <!-- Re-run -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        <span style="cursor:pointer;text-decoration:underline" onclick="runIqa()">Analyse again</span>
+        &nbsp;·&nbsp;
+        <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('iqa-issue').value='';document.getElementById('iqa-result').style.display='none';">Clear</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+// ═══════════════════════════════════════════════════════════
+// ISSUE QA ANALYSIS
+// ═══════════════════════════════════════════════════════════
+function iqaInit() { /* tab opened — nothing to pre-load */ }
+
+function iqaQuick(text) {
+  const el = document.getElementById('iqa-issue');
+  if (el) el.value = text;
+}
+
+async function runIqa() {
+  const issue = document.getElementById('iqa-issue')?.value?.trim();
+  const ctx   = document.getElementById('iqa-ctx')?.value?.trim() || '';
+  if (!issue) { document.getElementById('iqa-issue')?.focus(); return; }
+
+  document.getElementById('iqa-result').style.display  = 'none';
+  document.getElementById('iqa-error').style.display   = 'none';
+  document.getElementById('iqa-loading').style.display = 'block';
+  document.getElementById('iqa-btn').disabled = true;
+  document.getElementById('iqa-btn').innerHTML = '<div class="sp"></div> Analysing…';
+
+  try {
+    const d = await apiFetch('/qa-issue/', {
+      method:'POST', body:JSON.stringify({issue, system_context: ctx})
+    });
+    if (!d) throw new Error('Empty response');
+    if (d.detail) throw new Error(d.detail);
+    _renderIqa(d, issue);
+  } catch(err) {
+    document.getElementById('iqa-error').style.display = 'block';
+    document.getElementById('iqa-error').textContent   = 'Error: ' + err.message;
+  } finally {
+    document.getElementById('iqa-loading').style.display = 'none';
+    document.getElementById('iqa-btn').disabled  = false;
+    document.getElementById('iqa-btn').innerHTML = '❆ Analyse Issue';
+  }
+}
+
+function _renderIqa(d, issueText) {
+  document.getElementById('iqa-result').style.display = 'block';
+
+  const PRI = {
+    High:     {bg:'rgba(248,113,113,.12)', color:'var(--danger)', label:'🔴 High'},
+    Medium:   {bg:'rgba(251,191,36,.12)',  color:'var(--warn)',   label:'🟠 Medium'},
+    Low:      {bg:'rgba(107,107,138,.15)', color:'var(--dim)',    label:'🟡 Low'},
+    Critical: {bg:'rgba(220,38,38,.18)',   color:'#ef4444',       label:'🚨 Critical'},
+  };
+  const RISK_COLOR = {Critical:'var(--danger)',High:'var(--danger)',Medium:'var(--warn)',Low:'var(--ok)'};
+  const SEV_COLOR  = {Critical:'#ef4444',High:'var(--danger)',Medium:'var(--warn)',Low:'var(--ok)'};
+
+  // Banner
+  document.getElementById('iqa-banner').innerHTML =
+    `<strong style="color:var(--danger)">Issue:</strong> ${issueText.slice(0,200)}`;
+
+  // ── Step 1: Breakdown ──────────────────────────────────────────────────────
+  document.getElementById('iqa-breakdown').innerHTML =
+    (d.issue_breakdown||[]).map(row => {
+      const na = row.what_could_be_wrong?.toLowerCase().includes('not applicable');
+      return `<tr style="border-bottom:1px solid var(--bdr);opacity:${na?0.45:1}">
+        <td style="padding:9px 12px;font-size:12px;font-weight:600;white-space:nowrap;color:${na?'var(--dim)':'var(--txt)'}">
+          ${row.area}
+        </td>
+        <td style="padding:9px 12px;font-size:12px;line-height:1.6;color:${na?'var(--dim)':'var(--txt)'};font-style:${na?'italic':'normal'}">
+          ${row.what_could_be_wrong||'—'}
+        </td>
+      </tr>`;
+    }).join('');
+
+  // ── Step 2: Repro steps ────────────────────────────────────────────────────
+  document.getElementById('iqa-repro').innerHTML =
+    (d.reproduction_steps||[]).map(row => `
+      <tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:9px 12px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim)">${row.step}</td>
+        <td style="padding:9px 12px;font-size:12px;line-height:1.6">${row.action||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--dim);line-height:1.5">${row.expected_result||'—'}</td>
+        <td style="padding:9px 12px;font-size:11px;text-align:center">
+          <span style="color:${RISK_COLOR[row.risk]||'var(--dim)'};">${row.risk||'—'}</span>
+        </td>
+      </tr>`).join('');
+
+  // ── Step 3: Test coverage ──────────────────────────────────────────────────
+  document.getElementById('iqa-coverage').innerHTML =
+    (d.functional_coverage||[]).map(row => `
+      <tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:9px 12px;font-size:12px;font-weight:600">${row.function||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;line-height:1.6">${row.what_to_test||'—'}</td>
+        <td style="padding:9px 12px;text-align:center">
+          <span style="font-size:10px;font-weight:700;color:${RISK_COLOR[row.assumed_risk]||'var(--dim)'}">${row.assumed_risk||'—'}</span>
+        </td>
+      </tr>`).join('');
+
+  // ── Step 4: Root causes ────────────────────────────────────────────────────
+  document.getElementById('iqa-causes').innerHTML =
+    (d.root_causes||[]).map(row => {
+      const p = PRI[row.priority]||PRI.Low;
+      return `<tr style="border-bottom:1px solid var(--bdr);background:${row.priority==='High'||row.priority==='Critical'?'rgba(248,113,113,.03)':'transparent'}">
+        <td style="padding:9px 12px;text-align:center">
+          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${p.bg};color:${p.color};white-space:nowrap">${p.label}</span>
+        </td>
+        <td style="padding:9px 12px;font-size:12px;font-weight:600;line-height:1.5">${row.root_cause||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--dim);line-height:1.5">${row.reasoning||'—'}</td>
+      </tr>`;
+    }).join('');
+
+  // ── Step 5: Debug actions ──────────────────────────────────────────────────
+  document.getElementById('iqa-debug').innerHTML =
+    (d.debugging_actions||[]).map((row,i) => `
+      <tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:9px 12px;font-size:12px;font-weight:600">${row.action||'—'}</td>
+        <td style="padding:9px 12px">
+          <span style="font-size:10px;padding:2px 8px;border-radius:6px;background:var(--s2);color:var(--dim);font-family:var(--mono)">${row.owner||'—'}</span>
+        </td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--dim);line-height:1.5">${row.why||'—'}</td>
+      </tr>`).join('');
+
+  // ── Step 6: Verdict ────────────────────────────────────────────────────────
+  const v = d.verdict || {};
+  const sevBg = {Critical:'rgba(220,38,38,.15)',High:'rgba(248,113,113,.15)',Medium:'rgba(251,191,36,.15)',Low:'rgba(52,211,153,.15)'};
+  const brkBg = {High:'rgba(248,113,113,.15)',Medium:'rgba(251,191,36,.15)',Low:'rgba(52,211,153,.15)'};
+
+  const verdictCard = document.getElementById('iqa-verdict-card');
+  verdictCard.style.borderColor = SEV_COLOR[v.severity] || 'var(--bdr)';
+
+  document.getElementById('iqa-verdict').innerHTML = [
+    {label:'Severity',      val:v.severity||'—',      bg:sevBg[v.severity]||'var(--s2)',       color:SEV_COLOR[v.severity]||'var(--txt)',   sub:v.severity_reason},
+    {label:'Scope',         val:v.scope||'—',          bg:'var(--s2)',                          color:'var(--txt)',                           sub:v.scope_reason},
+    {label:'Business Risk', val:v.business_risk||'—',  bg:brkBg[v.business_risk]||'var(--s2)', color:RISK_COLOR[v.business_risk]||'var(--txt)', sub:v.business_reason},
+  ].map(item => `
+    <div style="flex:1;min-width:140px;background:${item.bg};border-radius:8px;padding:12px 14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${item.label}</div>
+      <div style="font-family:var(--mono);font-size:18px;font-weight:800;color:${item.color};margin-bottom:4px">${item.val}</div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.5">${item.sub||''}</div>
+    </div>`).join('');
+
+  // ── Step 7: Commentary ─────────────────────────────────────────────────────
+  document.getElementById('iqa-commentary').textContent = d.leadership_commentary || '';
+
+  // ── Missing info ───────────────────────────────────────────────────────────
+  const missing = (d.missing_information||[]).filter(Boolean);
+  const mWrap = document.getElementById('iqa-missing-wrap');
+  if (missing.length) {
+    mWrap.style.display = 'block';
+    document.getElementById('iqa-missing').innerHTML =
+      missing.map(m=>`<li style="margin-bottom:3px">${m}</li>`).join('');
+  } else {
+    mWrap.style.display = 'none';
+  }
+
+  document.getElementById('iqa-result').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 </script>
