@@ -173,6 +173,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('agrev')">Agent Review</div>
   <div class="tab" onclick="showTab('cat')">Categories</div>
   <div class="tab" onclick="showTab('qas')">QA Summary</div>
+  <div class="tab" onclick="showTab('imp')">Improvements</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -785,7 +786,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -805,7 +806,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -813,6 +814,7 @@ function showTab(id) {
   if (id === 'exp')  loadRunsForExport();
   if (id === 'cat')  renderCat();
   if (id === 'qas')  renderQaS();
+  if (id === 'imp')  renderImp();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -2180,6 +2182,203 @@ function _dimBar(dim, avg, color) {
   </div>`;
 }
 
+
+<!-- IMPROVEMENTS -->
+<div class="tab-content" id="tab-imp">
+  <div style="max-width:900px;margin:0 auto">
+
+    <!-- Controls -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <button class="btn btn-primary" onclick="renderImp(true)" id="imp-btn">
+          ✦ Generate Improvement Plan
+        </button>
+        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="imp-meta"></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="imp-stamp"></div>
+    </div>
+
+    <!-- Loading -->
+    <div id="imp-loading" style="display:none;padding:40px;text-align:center">
+      <div class="sp" style="margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--dim)">Claude Sonnet is identifying improvement areas…</div>
+    </div>
+
+    <!-- Error -->
+    <div id="imp-error" style="display:none;padding:16px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger)"></div>
+
+    <!-- Empty state -->
+    <div id="imp-empty" style="padding:40px;text-align:center;color:var(--dim)">
+      <div style="font-size:40px;margin-bottom:12px">🎯</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Improvement Recommendations</div>
+      <div style="font-size:13px;line-height:1.7;max-width:460px;margin:0 auto">
+        Generates a concrete, evidence-based action plan for the Head of Customer Care.
+        Separates agent behaviour issues, knowledge/process gaps, and system/operational
+        problems. Includes STOP/START/CONTINUE framework and leadership commentary.
+      </div>
+      <button class="btn btn-primary" onclick="renderImp(true)" style="margin-top:16px">
+        ✦ Generate Improvement Plan
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="imp-result" style="display:none">
+
+      <!-- Priority table -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:18px">
+        <div style="background:var(--s2);padding:10px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Improvement Recommendations</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:65px">Priority</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;width:100px">Type</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:140px">Area</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">What Should Change</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Evidence</th>
+                <th style="padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Effort</th>
+              </tr>
+            </thead>
+            <tbody id="imp-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- STOP / START / CONTINUE -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px" id="imp-ssc"></div>
+
+      <!-- Leadership commentary -->
+      <div style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:16px 18px;margin-bottom:14px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">
+          Leadership Commentary
+        </div>
+        <p id="imp-commentary" style="font-size:13px;line-height:1.9;margin:0"></p>
+      </div>
+
+      <!-- Regenerate -->
+      <div style="font-size:11px;color:var(--dim);text-align:center;padding:6px">
+        Results cached 10 min · <span style="cursor:pointer;text-decoration:underline" onclick="renderImp(true)">Regenerate fresh</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+// ═══════════════════════════════════════════════════════════
+// IMPROVEMENTS
+// ═══════════════════════════════════════════════════════════
+let _impData = null;
+
+async function renderImp(force = false) {
+  if (_impData && !force) { _renderImp(_impData); return; }
+
+  document.getElementById('imp-empty').style.display   = 'none';
+  document.getElementById('imp-result').style.display  = 'none';
+  document.getElementById('imp-error').style.display   = 'none';
+  document.getElementById('imp-loading').style.display = 'block';
+  document.getElementById('imp-btn').disabled = true;
+  document.getElementById('imp-btn').innerHTML = '<div class="sp"></div> Generating…';
+
+  try {
+    const data = await apiFetch('/improvements/', {method: 'POST'});
+    if (!data) throw new Error('Empty response');
+    if (data.detail) throw new Error(data.detail);
+    _impData = data;
+    _renderImp(data);
+  } catch(err) {
+    document.getElementById('imp-loading').style.display = 'none';
+    document.getElementById('imp-error').style.display   = 'block';
+    document.getElementById('imp-error').textContent     = 'Error: ' + err.message;
+    document.getElementById('imp-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('imp-btn').disabled  = false;
+    document.getElementById('imp-btn').innerHTML = '✦ Generate Improvement Plan';
+  }
+}
+
+function _renderImp(d) {
+  document.getElementById('imp-loading').style.display = 'none';
+  document.getElementById('imp-empty').style.display   = 'none';
+  document.getElementById('imp-error').style.display   = 'none';
+  document.getElementById('imp-result').style.display  = 'block';
+
+  const meta = d.meta || {};
+
+  document.getElementById('imp-stamp').textContent =
+    'Generated ' + new Date().toLocaleTimeString('nb-NO', {hour:'2-digit',minute:'2-digit'});
+  document.getElementById('imp-meta').textContent =
+    `${meta.total} tickets · avg ${meta.avg_score}/100 · ${meta.churn_pct}% churn`;
+
+  // ── Priority constants ─────────────────────────────────────────────────────
+  const PRI_STYLE = {
+    High:   {bg:'rgba(248,113,113,.12)', color:'var(--danger)',   label:'🔴 High'},
+    Medium: {bg:'rgba(251,191,36,.12)',  color:'var(--warn)',     label:'🟠 Medium'},
+    Low:    {bg:'rgba(107,107,138,.15)', color:'var(--dim)',      label:'🟡 Low'},
+  };
+  const TYPE_LABEL = {
+    agent_behavior:      '👤 Agent',
+    knowledge_process:   '📋 Process',
+    system_operational:  '⚙️ System',
+  };
+  const EFFORT_COLOR = {Low:'var(--ok)', Medium:'var(--warn)', High:'var(--danger)'};
+
+  // ── Priority table ─────────────────────────────────────────────────────────
+  const imps = d.improvements || [];
+  document.getElementById('imp-tbody').innerHTML = imps.map((row, i) => {
+    const pri  = PRI_STYLE[row.priority] || PRI_STYLE.Low;
+    const isH  = row.priority === 'High';
+    return `<tr style="border-bottom:1px solid var(--bdr);background:${isH?'rgba(248,113,113,.03)':'transparent'}">
+      <td style="padding:10px;text-align:center">
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;
+                     background:${pri.bg};color:${pri.color};white-space:nowrap">${pri.label}</span>
+      </td>
+      <td style="padding:10px">
+        <span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--s2);color:var(--dim);white-space:nowrap">${TYPE_LABEL[row.type]||row.type}</span>
+      </td>
+      <td style="padding:10px;font-size:12px;font-weight:600">${row.area||'—'}</td>
+      <td style="padding:10px;font-size:12px;line-height:1.6">${row.what_should_change||'—'}</td>
+      <td style="padding:10px;font-size:11px;color:var(--dim);font-style:italic;line-height:1.5">${row.evidence||'—'}</td>
+      <td style="padding:10px;text-align:center">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${EFFORT_COLOR[row.effort]||'var(--dim)'}">${row.effort||'—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // ── STOP / START / CONTINUE ────────────────────────────────────────────────
+  const ssc = [
+    {
+      key: 'stop', label: '🛑 STOP', sub: 'Based on observed behavior',
+      bg: 'rgba(248,113,113,.07)', border: 'rgba(248,113,113,.3)', color: 'var(--danger)',
+      items: d.stop || [],
+    },
+    {
+      key: 'start', label: '▶ START', sub: 'Based on gaps',
+      bg: 'rgba(52,211,153,.06)', border: 'rgba(52,211,153,.3)', color: 'var(--ok)',
+      items: d.start || [],
+    },
+    {
+      key: 'continue_doing', label: '🔄 CONTINUE', sub: 'Based on strengths',
+      bg: 'rgba(91,106,240,.06)', border: 'rgba(91,106,240,.3)', color: 'var(--ac2)',
+      items: d.continue_doing || [],
+    },
+  ];
+
+  document.getElementById('imp-ssc').innerHTML = ssc.map(s => `
+    <div style="background:${s.bg};border:1px solid ${s.border};border-radius:10px;padding:14px">
+      <div style="font-family:var(--mono);font-size:11px;font-weight:800;color:${s.color};margin-bottom:3px">${s.label}</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px;font-style:italic">${s.sub}</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">
+        ${(s.items.filter(Boolean)).map(item =>
+          `<li style="font-size:12px;margin-bottom:3px">${item}</li>`
+        ).join('')}
+      </ul>
+    </div>`).join('');
+
+  // ── Leadership commentary ──────────────────────────────────────────────────
+  document.getElementById('imp-commentary').textContent = d.leadership_commentary || '';
+}
 
 </script>
 </body>
