@@ -176,6 +176,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('imp')">Improvements</div>
   <div class="tab" onclick="showTab('fqa')">Full Analysis</div>
   <div class="tab" onclick="showTab('iqa')">Issue Analysis</div>
+  <div class="tab" onclick="showTab('sc2')">QA Scorecard</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -984,6 +985,165 @@ tbody td{padding:7px 9px;vertical-align:top}
   </div>
 </div>
 
+<!-- QA SCORECARD V2 -->
+<div class="tab-content" id="tab-sc2">
+  <div style="max-width:920px;margin:0 auto">
+
+    <!-- Framework header -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:16px 18px;margin-bottom:18px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-family:var(--disp);font-size:15px;font-weight:800;margin-bottom:4px">QA Scorecard v2 — Priority-Aware SLA Model</div>
+          <div style="font-size:12px;color:var(--dim);line-height:1.7">
+            Weighted scoring with embedded SLA penalties · Speed is not standalone — it's inside Process, Communication &amp; CX
+          </div>
+        </div>
+        <details style="font-size:11px;color:var(--dim);max-width:340px">
+          <summary style="cursor:pointer;font-weight:600;list-style:none;display:flex;align-items:center;gap:5px">
+            📐 Framework weights <span style="font-size:9px;opacity:.6">▼</span>
+          </summary>
+          <div style="margin-top:8px;line-height:2">
+            <span style="color:var(--ok);font-weight:700">35%</span> Accuracy / Resolution<br>
+            <span style="color:var(--ac2);font-weight:700">30%</span> Process &amp; Compliance <span style="opacity:.6">(incl. 10% SLA)</span><br>
+            <span style="color:var(--ac2);font-weight:700">20%</span> Communication <span style="opacity:.6">(incl. 5% response discipline)</span><br>
+            <span style="color:var(--ac2);font-weight:700">20%</span> Customer Experience <span style="opacity:.6">(incl. 5% speed perception)</span><br>
+            <span style="color:var(--dim);font-weight:700"> 5%</span> Documentation
+          </div>
+          <div style="margin-top:8px;line-height:2;border-top:1px solid var(--bdr);padding-top:8px">
+            <strong>SLA thresholds</strong><br>
+            🚨 Urgent: FRT 2h · every resp 6h · res 1d<br>
+            🔴 High:   FRT 4h · every resp 8h · res 1d<br>
+            🟠 Medium: FRT 1d · every resp 1d · res 2d<br>
+            🟡 Low:    FRT 1d · every resp 1d · res 3d
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <label style="font-size:11px;color:var(--dim);font-weight:600;display:block;margin-bottom:4px">Ticket ID</label>
+        <input id="sc2-tid" type="text" placeholder="e.g. 63511"
+          style="width:100%;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;
+                 padding:9px 12px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')runSc2()"/>
+      </div>
+      <button class="btn btn-primary" onclick="runSc2()" id="sc2-btn" style="height:38px;margin:0">
+        ✦ Run Weighted Scorecard
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="sc2-loading" style="display:none;padding:48px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px"></div>
+      <div style="font-size:13px;color:var(--dim)">Scoring against the 5-category weighted framework…</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">SLA timing computed · AI assesses each category · penalties applied</div>
+    </div>
+    <div id="sc2-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
+    <div id="sc2-empty" style="padding:48px;text-align:center;color:var(--dim)">
+      <div style="font-size:40px;margin-bottom:12px">⚖️</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Weighted QA Scorecard</div>
+      <div style="font-size:12px;line-height:1.8;max-width:480px;margin:0 auto">
+        Enter a ticket ID to score it against the production-ready weighted framework.<br>
+        SLA timing is computed automatically from ticket timestamps and message history.
+        Priority-based penalties are applied before the final score is calculated.
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div id="sc2-result" style="display:none">
+
+      <!-- Score hero -->
+      <div id="sc2-hero" style="border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:16px"></div>
+
+      <!-- SLA audit -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">SLA Audit</span>
+          <span id="sc2-sla-badge" style="font-size:11px;font-weight:700"></span>
+        </div>
+        <div id="sc2-sla-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bdr)"></div>
+        <div id="sc2-sla-events" style="padding:12px 14px;border-top:1px solid var(--bdr)"></div>
+      </div>
+
+      <!-- Category scorecard table -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Category Scores</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:180px">Category</th>
+            <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:60px">Weight</th>
+            <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:80px">Score</th>
+            <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Rationale</th>
+          </tr></thead>
+          <tbody id="sc2-cat-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Scoring breakdown -->
+      <details style="border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+          🔢 Score calculation breakdown
+          <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+        </summary>
+        <div id="sc2-formula" style="padding:14px;font-family:var(--mono);font-size:11px;line-height:2;color:var(--dim)"></div>
+      </details>
+
+      <!-- Strengths / Weaknesses / Coaching -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:12px 14px">
+          <div style="font-size:10px;color:var(--ok);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✓ Strengths</div>
+          <ul id="sc2-strengths" style="margin:0;padding-left:16px;font-size:12px;line-height:1.9"></ul>
+        </div>
+        <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:12px 14px">
+          <div style="font-size:10px;color:var(--danger);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✕ Weaknesses</div>
+          <ul id="sc2-weaknesses" style="margin:0;padding-left:16px;font-size:12px;line-height:1.9"></ul>
+        </div>
+      </div>
+
+      <div id="sc2-coaching-wrap" style="background:var(--s2);border:1px solid var(--bdr);border-left:4px solid var(--ac);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:none">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Coaching Focus</div>
+        <p id="sc2-coaching" style="font-size:13px;line-height:1.7;margin:0"></p>
+      </div>
+
+      <!-- Confidence model -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px" id="sc2-conf-wrap">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Confidence Model</span>
+          <span id="sc2-conf-badge" style="font-size:11px;font-weight:700"></span>
+        </div>
+        <!-- Action banner -->
+        <div id="sc2-conf-action" style="padding:12px 14px;border-bottom:1px solid var(--bdr);font-size:12px"></div>
+        <!-- Confidence scores grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bdr)">
+          <!-- Overall breakdown -->
+          <div style="background:var(--bg);padding:12px 14px">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Overall Factors</div>
+            <div id="sc2-conf-factors"></div>
+          </div>
+          <!-- Per-category confidence -->
+          <div style="background:var(--bg);padding:12px 14px">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Category Confidence</div>
+            <div id="sc2-conf-cats"></div>
+          </div>
+        </div>
+        <!-- Reason codes -->
+        <div style="padding:12px 14px;border-top:1px solid var(--bdr)">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Confidence Signals</div>
+          <div id="sc2-conf-reasons" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+      </div>
+      <div id="sc2-critical-wrap" style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-left:4px solid var(--danger);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:none">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">⚠ Critical Observation</div>
+        <p id="sc2-critical" style="font-size:13px;line-height:1.7;margin:0"></p>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════
@@ -1327,7 +1487,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -1347,7 +1507,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -1358,6 +1518,7 @@ function showTab(id) {
   if (id === 'imp')  renderImp();
   if (id === 'fqa')  fqaInit();
   if (id === 'iqa')  iqaInit();
+  if (id === 'sc2')  sc2Init();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -3084,6 +3245,329 @@ function _renderIqa(d, issueText) {
 
   document.getElementById('iqa-result').scrollIntoView({behavior:'smooth', block:'start'});
 }
+
+
+
+// ═══════════════════════════════════════════════════════════
+// QA SCORECARD V2 — Priority-Aware SLA + Confidence Model
+// ═══════════════════════════════════════════════════════════
+
+const SC2_CAT_LABELS = {
+  accuracy_resolution: 'Accuracy / Resolution',
+  process_compliance:  'Process & Compliance',
+  communication:       'Communication',
+  customer_experience: 'Customer Experience',
+  documentation:       'Documentation',
+};
+const SC2_WEIGHTS = {
+  accuracy_resolution: '35%',
+  process_compliance:  '30%',
+  communication:       '20%',
+  customer_experience: '20%',
+  documentation:        '5%',
+};
+const SC2_SLA_NOTES = {
+  process_compliance:  '(incl. 10% SLA)',
+  communication:       '(incl. 5% speed)',
+  customer_experience: '(incl. 5% speed)',
+};
+const SC2_PRI_BADGE = {
+  Urgent:  {color:'#ef4444', bg:'rgba(239,68,68,.15)',   label:'🚨 Urgent'},
+  High:    {color:'var(--danger)', bg:'rgba(248,113,113,.15)', label:'🔴 High'},
+  Medium:  {color:'var(--warn)',   bg:'rgba(251,191,36,.15)',  label:'🟠 Medium'},
+  Low:     {color:'var(--dim)',    bg:'rgba(107,107,138,.2)',  label:'🟡 Low'},
+  Unknown: {color:'var(--dim)',    bg:'var(--s2)',             label:'⬜ Unknown'},
+};
+const SC2_CONF_LEVEL_STYLE = {
+  'High':     {color:'var(--ok)',     bg:'rgba(52,211,153,.12)',  label:'✓ High Confidence'},
+  'Medium':   {color:'var(--warn)',   bg:'rgba(251,191,36,.12)',  label:'◎ Medium Confidence'},
+  'Low':      {color:'var(--danger)', bg:'rgba(248,113,113,.12)', label:'⚠ Low Confidence'},
+  'Very Low': {color:'#ef4444',       bg:'rgba(239,68,68,.15)',   label:'✕ Very Low Confidence'},
+};
+const SC2_CONF_ACTION_STYLE = {
+  'Accept automatically':                   {bg:'rgba(52,211,153,.08)', border:'rgba(52,211,153,.3)',  color:'var(--ok)'},
+  'Accept, flag for sampling review':        {bg:'rgba(251,191,36,.08)', border:'rgba(251,191,36,.3)', color:'var(--warn)'},
+  'Require human QA review':                {bg:'rgba(248,113,113,.08)',border:'rgba(248,113,113,.3)','color':'var(--danger)'},
+  'Force manual evaluation — do not auto-score': {bg:'rgba(239,68,68,.1)',   border:'rgba(239,68,68,.4)',  color:'#ef4444'},
+};
+
+function sc2Init() {
+  // Pre-populate from last ticket if available
+}
+
+// Allow launch from ticket modal
+function launchSc2(ticketId) {
+  showTab('sc2');
+  const input = document.getElementById('sc2-tid');
+  if (input) { input.value = ticketId; setTimeout(runSc2, 150); }
+}
+
+async function runSc2() {
+  const tid = document.getElementById('sc2-tid')?.value?.trim();
+  if (!tid) { document.getElementById('sc2-tid')?.focus(); return; }
+
+  document.getElementById('sc2-empty').style.display   = 'none';
+  document.getElementById('sc2-result').style.display  = 'none';
+  document.getElementById('sc2-error').style.display   = 'none';
+  document.getElementById('sc2-loading').style.display = 'block';
+  document.getElementById('sc2-btn').disabled = true;
+  document.getElementById('sc2-btn').innerHTML = '<div class="sp"></div> Scoring…';
+
+  try {
+    const d = await apiFetch('/qa-scorecard-v2/', {
+      method:'POST', body:JSON.stringify({ticket_id: tid})
+    });
+    if (!d) throw new Error('Empty response');
+    if (d.detail) throw new Error(d.detail);
+    _renderSc2(d);
+  } catch(err) {
+    document.getElementById('sc2-loading').style.display = 'none';
+    document.getElementById('sc2-error').style.display   = 'block';
+    document.getElementById('sc2-error').textContent     = 'Error: ' + err.message;
+    document.getElementById('sc2-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('sc2-btn').disabled  = false;
+    document.getElementById('sc2-btn').innerHTML = '✦ Run Weighted Scorecard';
+  }
+}
+
+function _sc2Bar(val, color, max=100) {
+  const pct = Math.round((val/max)*100);
+  return `<div style="height:5px;background:var(--bdr);border-radius:3px;overflow:hidden;margin-top:3px">
+    <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+  </div>`;
+}
+
+function _sc2ScoreColor(s) {
+  return s >= 80 ? 'var(--ok)' : s >= 60 ? 'var(--warn)' : 'var(--danger)';
+}
+function _sc2ConfColor(c) {
+  return c >= 85 ? 'var(--ok)' : c >= 70 ? 'var(--warn)' : 'var(--danger)';
+}
+
+function _renderSc2(d) {
+  document.getElementById('sc2-loading').style.display = 'none';
+  document.getElementById('sc2-empty').style.display   = 'none';
+  document.getElementById('sc2-error').style.display   = 'none';
+  document.getElementById('sc2-result').style.display  = 'block';
+
+  const tkt   = d.ticket      || {};
+  const sla   = d.sla         || {};
+  const sc    = d.scoring     || {};
+  const ai    = d.ai_assessment || {};
+  const conf  = d.confidence  || {};
+  const catC  = conf.category_confidence || {};
+  const cb    = conf.confidence_breakdown || {};
+
+  const priStyle  = SC2_PRI_BADGE[tkt.priority_label]  || SC2_PRI_BADGE.Unknown;
+  const confStyle = SC2_CONF_LEVEL_STYLE[conf.confidence_level] || SC2_CONF_LEVEL_STYLE.Low;
+  const finalColor = _sc2ScoreColor(sc.final_score || 0);
+
+  // ── Hero ──────────────────────────────────────────────────────────────────
+  document.getElementById('sc2-hero').innerHTML = `
+    <div style="padding:16px 18px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:15px;font-weight:800;margin-bottom:3px">
+          Ticket #${tkt.id} — ${tkt.agent||'—'}
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px">${tkt.subject||''}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:${priStyle.bg};color:${priStyle.color}">${priStyle.label}</span>
+          <span style="font-size:11px;color:var(--dim)">${tkt.msg_count} messages</span>
+          ${tkt.csat ? `<span style="font-size:11px;color:var(--dim)">CSAT ${tkt.csat}</span>` : ''}
+          ${tkt.arr  ? `<span style="font-size:11px;color:var(--warn)">NOK ${(tkt.arr/1000000).toFixed(2)}M ARR</span>` : ''}
+          ${sla.critical_failure ? '<span style="padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:rgba(239,68,68,.2);color:#ef4444">🚨 CRITICAL FAILURE</span>' : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center">
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:32px;font-weight:900;color:${finalColor};line-height:1">${sc.final_score||'—'}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px">QA Score</div>
+          <div style="font-size:11px;font-weight:700;color:${finalColor};margin-top:2px">${sc.performance_band||''}</div>
+        </div>
+        <div style="width:1px;height:50px;background:var(--bdr)"></div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:32px;font-weight:900;color:${_sc2ConfColor(conf.overall_confidence||0)};line-height:1">${conf.overall_confidence||'—'}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px">Confidence</div>
+          <div style="font-size:11px;font-weight:700;color:${confStyle.color};margin-top:2px">${conf.confidence_level||''}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── SLA audit ──────────────────────────────────────────────────────────────
+  const slaBreaches = (sla.sla_events||[]).filter(e=>e.type?.includes('BREACH'));
+  document.getElementById('sc2-sla-badge').innerHTML =
+    slaBreaches.length
+      ? `<span style="color:var(--danger)">⚠ ${slaBreaches.length} breach${slaBreaches.length>1?'es':''} · −${sla.total_penalty}pts</span>`
+      : `<span style="color:var(--ok)">✓ No breaches</span>`;
+
+  const slaMetrics = [
+    {label:'First Response', actual:sla.frt_actual_min, target:sla.frt_target_min, breach:sla.frt_breach},
+    {label:'Max Response Gap', actual:sla.max_response_gap_min, target:sla.response_target_min, breach:sla.response_breach},
+    {label:'Resolution Time', actual:sla.resolution_actual_min, target:sla.resolution_target_min, breach:sla.resolution_breach},
+  ];
+  document.getElementById('sc2-sla-grid').innerHTML = slaMetrics.map(m => {
+    const col = m.breach ? 'var(--danger)' : m.actual !== null && m.actual !== undefined ? 'var(--ok)' : 'var(--dim)';
+    const pct = m.actual != null && m.target ? Math.round(m.actual/m.target*100) : null;
+    return `<div style="background:var(--bg);padding:11px 14px">
+      <div style="font-size:10px;color:var(--dim);margin-bottom:3px">${m.label}</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${col}">
+        ${m.actual != null ? (m.actual < 60 ? m.actual+'m' : Math.round(m.actual/60*10)/10+'h') : '—'}
+      </div>
+      <div style="font-size:10px;color:var(--dim)">target: ${m.target < 60 ? m.target+'m' : Math.round(m.target/60*10)/10+'h'}</div>
+      ${pct != null ? _sc2Bar(Math.min(pct,100), m.breach?'var(--danger)':'var(--ok)') : ''}
+      ${m.breach ? '<div style="font-size:10px;color:var(--danger);margin-top:3px;font-weight:600">SLA BREACHED</div>' : ''}
+    </div>`;
+  }).join('');
+
+  document.getElementById('sc2-sla-events').innerHTML =
+    `<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Event log</div>` +
+    (sla.sla_events||[]).map(ev => {
+      const isBreach = ev.type?.includes('BREACH');
+      return `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;font-size:11px">
+        <span style="color:${isBreach?'var(--danger)':'var(--ok)'}">
+          ${isBreach ? '✕' : '✓'}
+        </span>
+        <span style="color:var(--dim);font-family:var(--mono)">${ev.type}</span>
+        <span style="color:var(--txt)">${ev.detail}</span>
+        ${ev.penalty ? `<span style="color:var(--danger);font-weight:700;margin-left:auto">−${ev.penalty}pts</span>` : ''}
+      </div>`;
+    }).join('');
+
+  // ── Category scorecard ─────────────────────────────────────────────────────
+  const slaContrib = sc.sla_contribution || {};
+  document.getElementById('sc2-cat-tbody').innerHTML = Object.entries(SC2_CAT_LABELS).map(([key, label]) => {
+    const catScore  = (sc.category_scores || {})[key];
+    const aiEntry   = ai[key] || {};
+    const catConf   = catC[key];
+    const note      = SC2_SLA_NOTES[key] || '';
+    const scoreCol  = _sc2ScoreColor(catScore||0);
+    const confCol   = _sc2ConfColor(catConf||0);
+    return `<tr style="border-bottom:1px solid var(--bdr)">
+      <td style="padding:10px 12px;font-size:12px;font-weight:600;white-space:nowrap">
+        ${label}
+        ${note ? `<div style="font-size:10px;color:var(--dim);font-weight:400">${note}</div>` : ''}
+      </td>
+      <td style="padding:10px 12px;text-align:center;font-size:11px;color:var(--dim)">${SC2_WEIGHTS[key]}</td>
+      <td style="padding:10px 12px;text-align:center">
+        <span style="display:inline-block;padding:3px 10px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;background:${scoreCol === 'var(--ok)' ? 'rgba(52,211,153,.15)' : scoreCol === 'var(--warn)' ? 'rgba(251,191,36,.15)' : 'rgba(248,113,113,.15)'};color:${scoreCol}">
+          ${catScore != null ? Math.round(catScore) : '—'}
+        </span>
+        ${catConf != null ? `<div style="font-size:10px;color:${confCol};margin-top:3px">${Math.round(catConf)}% conf</div>` : ''}
+      </td>
+      <td style="padding:10px 12px;font-size:12px;color:var(--dim);line-height:1.5">
+        ${aiEntry.rationale || '—'}
+        ${aiEntry.evidence ? `<div style="font-size:11px;font-style:italic;margin-top:2px;color:var(--dim);opacity:.8">${aiEntry.evidence.slice(0,100)}</div>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  // ── Score formula breakdown ────────────────────────────────────────────────
+  document.getElementById('sc2-formula').innerHTML = `
+    <div style="color:var(--txt);font-size:12px;margin-bottom:8px;font-weight:600">Final Score = weighted sum of blended category scores</div>
+    <div>accuracy_resolution  × 0.35 = ${Math.round((sc.category_scores?.accuracy_resolution||0) * 0.35)}</div>
+    <div>process_compliance   × 0.30 = ${Math.round((sc.category_scores?.process_compliance||0) * 0.30)} &nbsp;<span style="opacity:.6">(AI×0.67 + SLA×0.33)</span></div>
+    <div>communication        × 0.20 = ${Math.round((sc.category_scores?.communication||0) * 0.20)} &nbsp;<span style="opacity:.6">(AI×0.75 + SLA×0.25)</span></div>
+    <div>customer_experience  × 0.20 = ${Math.round((sc.category_scores?.customer_experience||0) * 0.20)} &nbsp;<span style="opacity:.6">(AI×0.75 + SLA×0.25)</span></div>
+    <div>documentation        × 0.05 = ${Math.round((sc.category_scores?.documentation||0) * 0.05)}</div>
+    <div style="border-top:1px solid var(--bdr);margin-top:8px;padding-top:8px;color:var(--txt);font-weight:700">
+      Final Score = ${sc.final_score} (${sc.performance_band})
+    </div>
+    <div style="margin-top:6px;opacity:.7">
+      SLA sub-score: ${slaContrib.sla_sub_score}/100 · Total penalty: −${slaContrib.total_penalty}pts
+    </div>`;
+
+  // ── Confidence model ────────────────────────────────────────────────────────
+  document.getElementById('sc2-conf-badge').innerHTML =
+    `<span style="padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:${confStyle.bg};color:${confStyle.color}">${confStyle.label} (${conf.overall_confidence})</span>`;
+
+  // Action banner
+  const actionStyle = SC2_CONF_ACTION_STYLE[conf.confidence_action] || SC2_CONF_ACTION_STYLE['Require human QA review'];
+  document.getElementById('sc2-conf-action').innerHTML = `
+    <div style="padding:8px 12px;background:${actionStyle.bg};border:1px solid ${actionStyle.border};border-radius:6px;color:${actionStyle.color};font-weight:600;font-size:12px">
+      🎯 Action: ${conf.confidence_action}
+    </div>`;
+
+  // Confidence factor bars
+  const factorLabels = {
+    data_completeness:    'Data Completeness',
+    ai_signal_strength:   'AI Signal Strength',
+    resolution_certainty: 'Resolution Certainty',
+    sla_data_quality:     'SLA Data Quality',
+  };
+  document.getElementById('sc2-conf-factors').innerHTML = Object.entries(factorLabels).map(([k,label]) => {
+    const val = cb[k] || 0;
+    const col = _sc2ConfColor(val);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+        <span style="color:var(--dim)">${label}</span>
+        <span style="font-family:var(--mono);font-weight:700;color:${col}">${Math.round(val)}</span>
+      </div>
+      ${_sc2Bar(val, col)}
+    </div>`;
+  }).join('');
+
+  // Per-category confidence
+  document.getElementById('sc2-conf-cats').innerHTML = Object.entries(SC2_CAT_LABELS).map(([key, label]) => {
+    const val = catC[key] || 0;
+    const col = _sc2ConfColor(val);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+        <span style="color:var(--dim)">${label}</span>
+        <span style="font-family:var(--mono);font-weight:700;color:${col}">${Math.round(val)}</span>
+      </div>
+      ${_sc2Bar(val, col)}
+    </div>`;
+  }).join('');
+
+  // Reason code pills
+  const rdesc = conf.reason_descriptions || {};
+  document.getElementById('sc2-conf-reasons').innerHTML =
+    (conf.reason_codes||[]).map(rc => {
+      const desc = rdesc[rc] || rc;
+      const isNeg = ['FEW_MESSAGES','NO_MESSAGES','SHORT_THREAD','NO_FRT_TIMESTAMP','NO_RESOLUTION_TS',
+                     'NO_PRIORITY','AMBIGUOUS_OUTCOME','UNRESOLVED_SIGNALS','NO_CUSTOMER_CONFIRM',
+                     'HIGH_COMPLEXITY','NO_CSAT','MULTI_ESCALATION','CHURN_SIGNALS'].includes(rc);
+      const isPos = ['RICH_THREAD','EXPLICIT_RESOLUTION','CUSTOMER_CONFIRMED','CLEAR_LANGUAGE',
+                     'CSAT_AVAILABLE','CLEAN_RESOLUTION'].includes(rc);
+      const col = isPos ? 'rgba(52,211,153,.15)' : isNeg ? 'rgba(248,113,113,.1)' : 'var(--s2)';
+      const textCol = isPos ? 'var(--ok)' : isNeg ? 'var(--danger)' : 'var(--dim)';
+      return `<div title="${desc}" style="padding:3px 9px;border-radius:10px;font-size:10px;font-family:var(--mono);background:${col};color:${textCol};cursor:default;white-space:nowrap">
+        ${rc}
+      </div>`;
+    }).join('');
+
+  // ── Strengths / weaknesses ─────────────────────────────────────────────────
+  document.getElementById('sc2-strengths').innerHTML =
+    (d.strengths||[]).filter(Boolean).map(s=>`<li style="margin-bottom:3px">${s}</li>`).join('');
+  document.getElementById('sc2-weaknesses').innerHTML =
+    (d.weaknesses||[]).filter(Boolean).map(s=>`<li style="margin-bottom:3px">${s}</li>`).join('');
+
+  // Coaching
+  const coaching = d.coaching_focus || '';
+  const cwrap = document.getElementById('sc2-coaching-wrap');
+  if (coaching) {
+    cwrap.style.display = 'block';
+    document.getElementById('sc2-coaching').textContent = coaching;
+  } else {
+    cwrap.style.display = 'none';
+  }
+
+  // Critical observations
+  const crit = d.critical_observations || '';
+  const crwrap = document.getElementById('sc2-critical-wrap');
+  if (crit) {
+    crwrap.style.display = 'block';
+    document.getElementById('sc2-critical').textContent = crit;
+  } else {
+    crwrap.style.display = 'none';
+  }
+
+  document.getElementById('sc2-result').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+
+
 
 </script>
 </body>
