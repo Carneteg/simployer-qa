@@ -109,59 +109,117 @@ app.include_router(export.router,  prefix="/export",  tags=["export"])
 # ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["ops"])
 async def health():
-    pool = await get_pool_status()
+    from services.cache import get_pool_status as redis_pool_status
+    db_pool   = await get_pool_status()
+    redis_pool = await redis_pool_status()
     return {
-        "status": "ok",
+        "status":      "ok",
         "environment": settings.environment,
-        "db_pool": pool,
+        "db_pool":     db_pool,
+        "redis":       redis_pool,
     }
 
 
-# ── WebSocket: live run progress ──────────────────────────────────────────────
+# ── WebSocket: live run progress (Redis pub/sub) ──────────────────────────────
 @app.websocket("/ws/runs/{run_id}")
 async def run_progress(ws: WebSocket, run_id: str):
     """
-    Poll the database every 2s and stream run progress to the browser.
-    Works without Redis pub/sub — compatible with Render free tier.
+    Subscribe to Redis pub/sub channel for real-time run progress.
+    Falls back to DB polling if Redis is unavailable.
+
+    Upgrade: replaced 2s DB polling with instant Redis push events.
+    Starter plan gives 250 connections — pub/sub subscriptions are cheap.
     """
-    from database import AsyncSessionLocal
-    from models import Run
+    from services.cache import redis as _redis, key_run_channel
     import uuid as _uuid
 
     await ws.accept()
+
+    # ── Try Redis pub/sub first ────────────────────────────────────────────────
     try:
-        while True:
+        pubsub = _redis.pubsub()
+        await pubsub.subscribe(key_run_channel(run_id))
+
+        try:
+            # Send current DB state immediately so UI doesn't wait for first event
+            from database import AsyncSessionLocal
+            from models import Run
             async with AsyncSessionLocal() as db:
-                try:
-                    run = await db.get(Run, _uuid.UUID(run_id))
-                except Exception:
-                    run = None
-
+                run = await db.get(Run, _uuid.UUID(run_id))
             if run:
-                pct = 0
-                if run.tickets_total and run.tickets_total > 0:
-                    pct = round(run.tickets_done / run.tickets_total * 100)
-
-                payload = json.dumps({
-                    "run_id": run_id,
-                    "status": run.status,
-                    "done": run.tickets_done,
-                    "total": run.tickets_total,
-                    "churn": run.churn_count,
-                    "pct": pct,
-                    "error": run.error,
-                })
-                try:
-                    await ws.send_text(payload)
-                except Exception:
-                    break
-
+                pct = round(run.tickets_done / run.tickets_total * 100) if run.tickets_total else 0
+                await ws.send_text(json.dumps({
+                    "run_id": run_id, "status": run.status,
+                    "done": run.tickets_done, "total": run.tickets_total,
+                    "churn": run.churn_count, "pct": pct,
+                }))
                 if run.status in ("done", "failed"):
-                    break
+                    return
 
-            await asyncio.sleep(2)
-    except WebSocketDisconnect:
-        pass
+            # Stream Redis events as they arrive
+            while True:
+                try:
+                    msg = await asyncio.wait_for(
+                        pubsub.get_message(ignore_subscribe_messages=True),
+                        timeout=30.0,   # heartbeat — resend DB state every 30s
+                    )
+                except asyncio.TimeoutError:
+                    # Heartbeat: re-read DB and push current state
+                    from database import AsyncSessionLocal
+                    from models import Run
+                    async with AsyncSessionLocal() as db:
+                        run = await db.get(Run, _uuid.UUID(run_id))
+                    if run:
+                        pct = round(run.tickets_done / run.tickets_total * 100) if run.tickets_total else 0
+                        await ws.send_text(json.dumps({
+                            "run_id": run_id, "status": run.status,
+                            "done": run.tickets_done, "total": run.tickets_total,
+                            "churn": run.churn_count, "pct": pct,
+                        }))
+                        if run.status in ("done", "failed"):
+                            break
+                    continue
+
+                if msg and msg.get("type") == "message":
+                    data = msg["data"]
+                    await ws.send_text(data)
+                    try:
+                        parsed = json.loads(data)
+                        if parsed.get("status") in ("done", "failed"):
+                            break
+                    except Exception:
+                        pass
+
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await pubsub.unsubscribe(key_run_channel(run_id))
+            await pubsub.aclose()
+
+    except Exception as redis_err:
+        # ── Fallback: DB polling if Redis is down ─────────────────────────────
+        logger.warning(f"Redis unavailable for WebSocket, falling back to DB poll: {redis_err}")
+        from database import AsyncSessionLocal
+        from models import Run
+        try:
+            while True:
+                async with AsyncSessionLocal() as db:
+                    run = await db.get(Run, _uuid.UUID(run_id))
+                if run:
+                    pct = round(run.tickets_done / run.tickets_total * 100) if run.tickets_total else 0
+                    try:
+                        await ws.send_text(json.dumps({
+                            "run_id": run_id, "status": run.status,
+                            "done": run.tickets_done, "total": run.tickets_total,
+                            "churn": run.churn_count, "pct": pct,
+                        }))
+                    except Exception:
+                        break
+                    if run.status in ("done", "failed"):
+                        break
+                await asyncio.sleep(2)
+        except WebSocketDisconnect:
+            pass
 
 
 # ── Serve frontend ────────────────────────────────────────────────────────────

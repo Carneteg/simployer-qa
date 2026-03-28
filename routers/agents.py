@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import Ticket, Evaluation, User
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set, key_agents, key_agent_detail, TTL_AGENTS, TTL_AGENT_DETAIL
 
 router = APIRouter()
 logger = logging.getLogger("simployer.agents")
@@ -23,6 +24,12 @@ async def list_agents(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = key_agents(str(user.id))
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"agents cache HIT for user {user.id}")
+        return cached
+
     t0 = time.time()
     result = await db.execute(
         select(
@@ -44,8 +51,8 @@ async def list_agents(
     )
     rows = result.mappings().all()
     ms = round((time.time() - t0) * 1000)
-    logger.info(f"agents aggregation: {len(rows)} agents in {ms}ms")
-    return [
+    logger.info(f"agents aggregation: {len(rows)} agents in {ms}ms (cache MISS)")
+    result_list = [
         {
             "agent_name": r["agent_name"],
             "group_name": r["group_name"],
@@ -61,6 +68,8 @@ async def list_agents(
         }
         for r in rows
     ]
+    await cache_set(cache_key, result_list, TTL_AGENTS)
+    return result_list
 
 
 @router.get("/{agent_name}")

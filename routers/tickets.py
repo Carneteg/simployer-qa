@@ -101,6 +101,8 @@ async def list_tickets(
         )
         for r in rows
     ]
+    await cache_set(cache_key, [t.model_dump() for t in tickets_out], TTL_TICKETS)
+    return tickets_out
 
 
 @router.get("/{ticket_id}/messages")

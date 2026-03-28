@@ -22,6 +22,31 @@ async def pool_status(user: User = Depends(current_user)):
     return await get_pool_status()
 
 
+@router.get("/redis")
+async def redis_status(user: User = Depends(current_user)):
+    """Redis/Valkey connection pool + server info."""
+    from services.cache import redis, get_pool_status as rps, _ping_latency
+    try:
+        info    = await redis.info("server")
+        clients = await redis.info("clients")
+        memory  = await redis.info("memory")
+        pool    = await rps()
+        return {
+            "version":           info.get("redis_version"),
+            "mode":              info.get("redis_mode"),
+            "uptime_days":       info.get("uptime_in_days"),
+            "connected_clients": clients.get("connected_clients"),
+            "blocked_clients":   clients.get("blocked_clients"),
+            "used_memory_human": memory.get("used_memory_human"),
+            "maxmemory_human":   memory.get("maxmemory_human"),
+            "maxmemory_policy":  memory.get("maxmemory_policy"),
+            "pool_max":          pool.get("pool_max"),
+            "ping_ms":           pool.get("ping_ms"),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/explain")
 async def explain_queries(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
     """

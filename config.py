@@ -1,13 +1,13 @@
 from pydantic_settings import BaseSettings
 from typing import List
-import arq.connections
 
 
 class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://user:pass@localhost/simployer_qa"
 
-    # Redis
+    # Redis/Valkey — Render Starter plan (Frankfurt, EU Central)
+    # Valkey 8.1.4 | 256 MB RAM | 250 connections | persistence enabled
     redis_url: str = "redis://localhost:6379"
 
     # Auth
@@ -25,10 +25,7 @@ class Settings(BaseSettings):
     cors_origins: List[str] = ["http://localhost:8080", "http://localhost:3000"]
     environment: str = "development"
     sentry_dsn: str = ""
-
-    @property
-    def redis_settings(self) -> arq.connections.RedisSettings:
-        return arq.connections.RedisSettings.from_dsn(self.redis_url)
+    app_url: str = "https://simployer-qa.onrender.com"
 
     class Config:
         env_file = ".env"

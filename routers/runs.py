@@ -68,24 +68,42 @@ class RunOut(BaseModel):
 async def _run_evaluation_task(run_id: str):
     """
     FastAPI background task — runs the full evaluation in-process.
-    No separate worker or arq required.
+    Uses real Redis pub/sub for live progress streaming to the WebSocket.
     """
     import logging
+    from services.cache import redis as _redis, publish_run_event
+
     logger = logging.getLogger("simployer.runs")
 
-    # Build a fake arq-style ctx with redis if available, otherwise no pub/sub
-    class FakeRedis:
-        async def publish(self, channel, message):
-            logger.debug(f"[no-redis] {channel}: {message[:80]}")
+    class RealRedis:
+        """Thin wrapper that matches the arq ctx["redis"] interface."""
+        async def publish(self, channel: str, message: str):
+            try:
+                await _redis.publish(channel, message)
+            except Exception as e:
+                logger.debug(f"redis publish failed (non-fatal): {e}")
 
-    ctx = {"redis": FakeRedis()}
+    ctx = {"redis": RealRedis()}
 
     try:
         from services.evaluator import evaluate_run
         await evaluate_run(ctx, run_id)
+
+        # Invalidate Redis cache — stale agents/tickets data is now outdated
+        try:
+            from services.cache import invalidate as cache_invalidate
+            from database import AsyncSessionLocal
+            from models import Run as RunModel
+            async with AsyncSessionLocal() as db:
+                run = await db.get(RunModel, uuid.UUID(run_id))
+                if run:
+                    await cache_invalidate(str(run.user_id))
+                    logger.info(f"Cache invalidated for user {run.user_id} after run {run_id}")
+        except Exception as ce:
+            logger.warning(f"Cache invalidation failed (non-fatal): {ce}")
+
     except Exception as e:
         logger.error(f"Background evaluation failed for run {run_id}: {e}")
-        # Update run status to failed
         async with AsyncSessionLocal() as db:
             run = await db.get(Run, uuid.UUID(run_id))
             if run:
