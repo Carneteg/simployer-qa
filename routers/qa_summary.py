@@ -124,29 +124,58 @@ async def generate_qa_summary(
 
     t0 = time.time()
 
-    # ── 1. Ticket-level aggregates ────────────────────────────────────────────
-    ticket_sql = text("""
-        WITH latest AS (
-            SELECT DISTINCT ON (ticket_id, user_id)
-                ticket_id, user_id, total_score, churn_risk_flag,
-                contact_problem_flag, cx_bad, scores
-            FROM evaluations
-            WHERE user_id = :uid
-            ORDER BY ticket_id, user_id, id DESC
-        )
-        SELECT
-            COUNT(*)                                                   AS total,
-            ROUND(AVG(total_score)::numeric, 1)                       AS avg_score,
-            SUM(CASE WHEN total_score >= 75 THEN 1 ELSE 0 END)        AS high_count,
-            SUM(CASE WHEN total_score >= 55 AND total_score < 75
-                     THEN 1 ELSE 0 END)                               AS mid_count,
-            SUM(CASE WHEN total_score < 55  THEN 1 ELSE 0 END)        AS low_count,
-            SUM(CASE WHEN churn_risk_flag   THEN 1 ELSE 0 END)        AS churn_count,
-            SUM(CASE WHEN contact_problem_flag THEN 1 ELSE 0 END)     AS contact_count,
-            SUM(CASE WHEN cx_bad            THEN 1 ELSE 0 END)        AS cx_bad_count
-        FROM latest
-    """)
-    t_res = await db.execute(ticket_sql, {"uid": str(user.id)})
+    # ── 1+2+3. Run ticket metrics, ARR, and mismatch in parallel ─────────────
+    t_res, arr_res_p, mismatch_res_p = await asyncio.gather(
+        db.execute(text("""
+            WITH latest AS (
+                SELECT DISTINCT ON (ticket_id, user_id)
+                    ticket_id, user_id, total_score, churn_risk_flag,
+                    contact_problem_flag, cx_bad, scores
+                FROM evaluations
+                WHERE user_id = :uid
+                ORDER BY ticket_id, user_id, id DESC
+            )
+            SELECT
+                COUNT(*)                                                   AS total,
+                ROUND(AVG(total_score)::numeric, 1)                       AS avg_score,
+                SUM(CASE WHEN total_score >= 75 THEN 1 ELSE 0 END)        AS high_count,
+                SUM(CASE WHEN total_score >= 55 AND total_score < 75
+                         THEN 1 ELSE 0 END)                               AS mid_count,
+                SUM(CASE WHEN total_score < 55  THEN 1 ELSE 0 END)        AS low_count,
+                SUM(CASE WHEN churn_risk_flag   THEN 1 ELSE 0 END)        AS churn_count,
+                SUM(CASE WHEN contact_problem_flag THEN 1 ELSE 0 END)     AS contact_count,
+                SUM(CASE WHEN cx_bad            THEN 1 ELSE 0 END)        AS cx_bad_count
+            FROM latest
+        """), {"uid": str(user.id)}),
+        db.execute(text("""
+            WITH latest AS (
+                SELECT DISTINCT ON (e.ticket_id, e.user_id)
+                    e.churn_risk_flag, e.churn_confirmed, t.arr, t.company_id
+                FROM evaluations e
+                JOIN tickets t ON t.id=e.ticket_id AND t.user_id=e.user_id
+                WHERE e.user_id=:uid
+                ORDER BY e.ticket_id, e.user_id, e.id DESC
+            )
+            SELECT
+                SUM(CASE WHEN churn_confirmed THEN 1 ELSE 0 END)          AS confirmed_churn,
+                SUM(CASE WHEN churn_risk_flag AND arr IS NOT NULL
+                         THEN arr ELSE 0 END)                              AS arr_at_risk,
+                COUNT(DISTINCT CASE WHEN churn_risk_flag AND company_id IS NOT NULL
+                               THEN company_id END)                        AS companies_at_risk
+            FROM latest
+        """), {"uid": str(user.id)}),
+        db.execute(text("""
+            WITH latest AS (
+                SELECT DISTINCT ON (ticket_id, user_id) cx_bad, total_score
+                FROM evaluations WHERE user_id=:uid
+                ORDER BY ticket_id, user_id, id DESC
+            )
+            SELECT
+                SUM(CASE WHEN cx_bad THEN 1 ELSE 0 END)                   AS cx_bad_total,
+                SUM(CASE WHEN cx_bad AND total_score>=75 THEN 1 ELSE 0 END) AS mismatch
+            FROM latest
+        """), {"uid": str(user.id)}),
+    )
     tr = t_res.mappings().first() or {}
 
     total        = int(tr.get("total") or 0)
@@ -168,45 +197,12 @@ async def generate_qa_summary(
     contact_pct = round(contact_count / total * 100, 1)
     cx_bad_pct  = round(cx_bad_count  / total * 100, 1)
 
-    # ── 2. Confirmed churn + ARR at risk ──────────────────────────────────────
-    arr_sql = text("""
-        WITH latest AS (
-            SELECT DISTINCT ON (e.ticket_id, e.user_id)
-                e.ticket_id, e.user_id, e.churn_risk_flag, e.churn_confirmed,
-                t.arr, t.company_id
-            FROM evaluations e
-            JOIN tickets t ON t.id = e.ticket_id AND t.user_id = e.user_id
-            WHERE e.user_id = :uid
-            ORDER BY e.ticket_id, e.user_id, e.id DESC
-        )
-        SELECT
-            SUM(CASE WHEN churn_confirmed THEN 1 ELSE 0 END)          AS confirmed_churn,
-            SUM(CASE WHEN churn_risk_flag AND arr IS NOT NULL THEN arr ELSE 0 END) AS arr_at_risk,
-            COUNT(DISTINCT CASE WHEN churn_risk_flag AND company_id IS NOT NULL
-                           THEN company_id END)                        AS companies_at_risk
-        FROM latest
-    """)
-    arr_res = await db.execute(arr_sql, {"uid": str(user.id)})
-    ar = arr_res.mappings().first() or {}
+    ar = arr_res_p.mappings().first() or {}
     confirmed_churn  = int(ar.get("confirmed_churn") or 0)
     arr_at_risk      = float(ar.get("arr_at_risk") or 0)
     companies_at_risk = int(ar.get("companies_at_risk") or 0)
 
-    # ── 3. Mismatch count ─────────────────────────────────────────────────────
-    mismatch_sql = text("""
-        WITH latest AS (
-            SELECT DISTINCT ON (ticket_id, user_id)
-                ticket_id, user_id, churn_risk_flag, total_score, cx_bad
-            FROM evaluations WHERE user_id = :uid
-            ORDER BY ticket_id, user_id, id DESC
-        )
-        SELECT
-            SUM(CASE WHEN cx_bad THEN 1 ELSE 0 END)                   AS cx_bad_total,
-            SUM(CASE WHEN cx_bad AND total_score >= 75 THEN 1 ELSE 0 END) AS mismatch
-        FROM latest
-    """)
-    m_res = await db.execute(mismatch_sql, {"uid": str(user.id)})
-    mr = m_res.mappings().first() or {}
+    mr = mismatch_res_p.mappings().first() or {}
     cx_bad_total  = int(mr.get("cx_bad_total") or 0)
     mismatch_count = int(mr.get("mismatch") or 0)
     mismatch_pct   = round(mismatch_count / cx_bad_total * 100, 1) if cx_bad_total else 0

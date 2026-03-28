@@ -77,8 +77,10 @@ from config import settings
 from database import get_db
 from models import User, Ticket, Message, Evaluation
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set
 
 router  = APIRouter()
+TTL_SC2 = 300   # 5 min — weighted scorecard + confidence result
 logger  = logging.getLogger("simployer.qa_scorecard_v2")
 _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=55.0)
 
@@ -593,9 +595,16 @@ async def generate_qa_scorecard_v2(
     user: User = Depends(current_user),
     db:   AsyncSession = Depends(get_db),
 ):
+    # ── Cache check ──────────────────────────────────────────────────────────
+    cache_key = f"sc2:{user.id}:{body.ticket_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"sc2 cache HIT ticket={body.ticket_id}")
+        return cached
+
     t0 = time.time()
 
-    # ── Load ticket ───────────────────────────────────────────────────────────
+    # ── Load ticket ────────────────────────────────────────────────────────────
     tkt_res = await db.execute(
         select(Ticket).where(Ticket.id == body.ticket_id, Ticket.user_id == user.id)
     )
@@ -693,7 +702,7 @@ async def generate_qa_scorecard_v2(
         f"priority={priority_label} {gen_ms}ms"
     )
 
-    return {
+    _result = {
         # ── Ticket metadata ──────────────────────────────────────────────────
         "ticket": {
             "id":             body.ticket_id,
@@ -744,3 +753,5 @@ async def generate_qa_scorecard_v2(
             "gen_ms":            gen_ms,
         },
     }
+    await cache_set(cache_key, _result, TTL_SC2)
+    return _result

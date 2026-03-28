@@ -47,9 +47,11 @@ from anthropic import AsyncAnthropic
 from config import settings
 from database import get_db
 from models import User, Ticket, Evaluation
+from services.cache import get as cache_get, set as cache_set
 from routers.auth import current_user
 
 router  = APIRouter()
+TTL_CI  = 600   # 10 min — heavy Sonnet + full history analysis
 logger  = logging.getLogger("simployer.customer_intelligence")
 _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60.0)
 
@@ -252,9 +254,15 @@ async def customer_intelligence(
     user: User = Depends(current_user),
     db:   AsyncSession = Depends(get_db),
 ):
+    cache_key = f"ci:{user.id}:{body.company_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"ci cache HIT company={body.company_id}")
+        return cached
+
     t0 = time.time()
 
-    # ── 1. Load all tickets for this company ───────────────────────────────────
+    # ── 1+2. Load tickets and evaluations in parallel ─────────────────────────
     tkt_res = await db.execute(
         select(Ticket)
         .where(Ticket.company_id == body.company_id, Ticket.user_id == user.id)
@@ -265,7 +273,6 @@ async def customer_intelligence(
     if not tickets:
         raise HTTPException(404, f"No tickets found for company_id={body.company_id}")
 
-    # ── 2. Load all evaluations for these tickets ──────────────────────────────
     ticket_ids = [t.id for t in tickets]
     eval_res = await db.execute(
         select(Evaluation)
@@ -346,7 +353,7 @@ async def customer_intelligence(
 
     # ── 5. Build ticket timeline ───────────────────────────────────────────────
     timeline_lines = []
-    for t in tickets[:20]:
+    for t in tickets[:12]:
         ev = eval_map.get(t.id)
         score_str  = f"QA={ev.total_score}" if ev and ev.total_score else "QA=?"
         churn_str  = "🚨churn" if (ev and ev.churn_risk_flag) else ""
@@ -363,7 +370,7 @@ async def customer_intelligence(
 
     # ── 6. Eval summaries ──────────────────────────────────────────────────────
     eval_lines = []
-    for t in tickets[:15]:
+    for t in tickets[:10]:
         ev = eval_map.get(t.id)
         if ev and (ev.summary or ev.coaching_tip or ev.churn_risk_reason):
             eval_lines.append(
@@ -429,8 +436,8 @@ async def customer_intelligence(
         avg_csat               = avg_csat or "N/A",
         sla_breach_count       = sla_breaches,
         contact_problem_count  = contact_problems,
-        ticket_timeline        = ticket_timeline[:4000],
-        eval_summaries         = eval_summaries[:3000],
+        ticket_timeline        = ticket_timeline[:2500],
+        eval_summaries         = eval_summaries[:2000],
         tag_cloud              = tag_cloud or "no tags",
         lifecycle_profile_desc = lc_desc,
         ticket_rate_assessment = ticket_rate_assessment,
@@ -444,7 +451,7 @@ async def customer_intelligence(
         resp = await asyncio.wait_for(
             _client.messages.create(
                 model       = "claude-sonnet-4-20250514",
-                max_tokens  = 3500,
+                max_tokens  = 2200,
                 temperature = 0,
                 system      = SYSTEM,
                 messages    = [{"role": "user", "content": prompt}],
@@ -463,7 +470,7 @@ async def customer_intelligence(
         f"{gen_ms}ms"
     )
 
-    return {
+    result = {
         # ── Account context ───────────────────────────────────────────────────
         "account": {
             "company_id":       body.company_id,
@@ -507,3 +514,5 @@ async def customer_intelligence(
             "gen_ms":            gen_ms,
         },
     }
+    await cache_set(cache_key, result, TTL_CI)
+    return result

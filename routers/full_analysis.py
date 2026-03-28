@@ -224,28 +224,25 @@ async def generate_full_analysis(
 ):
     t0 = time.time()
 
-    # ── 1. Load focal ticket + messages ──────────────────────────────────────
-    tkt_res = await db.execute(
-        select(Ticket).where(Ticket.id == body.ticket_id, Ticket.user_id == user.id)
+    # ── 1. Load ticket + messages + eval in parallel ─────────────────────────
+    tkt_res, msg_res, eval_res = await asyncio.gather(
+        db.execute(select(Ticket).where(Ticket.id == body.ticket_id, Ticket.user_id == user.id)),
+        db.execute(
+            select(Message).where(
+                Message.ticket_id == body.ticket_id,
+                Message.user_id   == user.id,
+            ).order_by(Message.ts.asc())
+        ),
+        db.execute(
+            select(Evaluation)
+            .where(Evaluation.ticket_id == body.ticket_id, Evaluation.user_id == user.id)
+            .order_by(Evaluation.id.desc()).limit(1)
+        ),
     )
     ticket = tkt_res.scalar_one_or_none()
     if not ticket:
         raise HTTPException(404, f"Ticket {body.ticket_id} not found")
-
-    msg_res = await db.execute(
-        select(Message).where(
-            Message.ticket_id == body.ticket_id,
-            Message.user_id   == user.id,
-        ).order_by(Message.ts.asc())
-    )
     messages = msg_res.scalars().all()
-
-    # Load focal ticket's latest evaluation
-    eval_res = await db.execute(
-        select(Evaluation)
-        .where(Evaluation.ticket_id == body.ticket_id, Evaluation.user_id == user.id)
-        .order_by(Evaluation.id.desc()).limit(1)
-    )
     focal_eval = eval_res.scalar_one_or_none()
 
     agent_name = ticket.agent_name or "Unknown"
@@ -382,7 +379,7 @@ async def generate_full_analysis(
         agent_avg_score    = agent_avg,
         agent_churn_count  = agent_churn_c,
         agent_churn_pct    = agent_churn_pct,
-        agent_dataset      = _build_agent_dataset(list(agent_tickets), agent_msg_map)[:4000],
+        agent_dataset      = _build_agent_dataset(list(agent_tickets), agent_msg_map)[:2500],
         total_tickets      = total_tix,
         team_avg_score     = team_avg,
         team_churn_pct     = team_churn_pct,
@@ -399,7 +396,7 @@ async def generate_full_analysis(
         resp = await asyncio.wait_for(
             _client.messages.create(
                 model       = "claude-sonnet-4-20250514",
-                max_tokens  = 4000,
+                max_tokens  = 2800,
                 temperature = 0,
                 system      = SYSTEM,
                 messages    = [{"role": "user", "content": prompt}],

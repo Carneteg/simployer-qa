@@ -869,7 +869,7 @@ tbody td{padding:7px 9px;vertical-align:top}
     <div id="iqa-loading" style="display:none;padding:48px;text-align:center">
       <div class="sp" style="margin:0 auto 14px"></div>
       <div style="font-size:13px;color:var(--dim)">Senior QA Manager is analysing the issue…</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 10–20 seconds</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Usually 15–25 seconds</div>
     </div>
 
     <!-- Error -->
@@ -1039,7 +1039,7 @@ tbody td{padding:7px 9px;vertical-align:top}
     <div id="sc2-loading" style="display:none;padding:48px;text-align:center">
       <div class="sp" style="margin:0 auto 14px"></div>
       <div style="font-size:13px;color:var(--dim)">Scoring against the 5-category weighted framework…</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:5px">SLA timing computed · AI assesses each category · penalties applied</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">SLA timing computed · AI assesses each category · penalties applied · ~15s</div>
     </div>
     <div id="sc2-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
     <div id="sc2-empty" style="padding:48px;text-align:center;color:var(--dim)">
@@ -1183,7 +1183,7 @@ tbody td{padding:7px 9px;vertical-align:top}
     <div id="ci-loading" style="display:none;padding:48px;text-align:center">
       <div class="sp" style="margin:0 auto 14px"></div>
       <div style="font-size:13px;color:var(--dim)">Analysing full customer history…</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:5px">Root cause · Churn risk · Lifecycle fit · Recommendations</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">Root cause · Churn risk · Lifecycle fit · Recommendations · ~20s (cached after first run)</div>
     </div>
     <div id="ci-error" style="display:none;padding:14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:10px;font-size:13px;color:var(--danger);margin-bottom:14px"></div>
     <div id="ci-empty" style="padding:48px;text-align:center;color:var(--dim)">
@@ -1570,8 +1570,7 @@ async function initApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
     document.getElementById('user-pill').textContent = _user.email;
-    await loadEvals();
-    await loadRunHistory();
+    await Promise.all([loadEvals(), loadRunHistory()]);
   } catch(e) {
     document.getElementById('login-err').textContent = 'Error: ' + e.message;
   }
@@ -1582,7 +1581,7 @@ async function loadEvals() {
   UI.loading('cat-bars', 4);
   UI.loading('fail-bars', 4);
   try {
-    const data = await apiFetch('/tickets?limit=1000') || [];
+    const data = await apiFetch('/tickets?limit=800') || [];
     State.setEvals(data);
     _evals = State.evals; // keep legacy alias in sync
     renderAll();
@@ -1727,7 +1726,7 @@ async function loadRunHistory() {
 }
 
 async function loadRunEvals(runId) {
-  _evals = await apiFetch(`/tickets?run_id=${runId}&limit=1000`) || [];
+  _evals = await apiFetch(`/tickets?run_id=${runId}&limit=800`) || [];
   renderAll();
   showTab('ov');
 }

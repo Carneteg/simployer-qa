@@ -133,7 +133,7 @@ async def generate_improvements(
 
     t0 = time.time()
 
-    # ── 1. Core ticket metrics (shared with qa_summary) ───────────────────────
+    # ── 1+2+3. Run core metrics, ARR, and mismatch in parallel ──────────────
     ticket_sql = text("""
         WITH latest AS (
             SELECT DISTINCT ON (ticket_id, user_id)
@@ -152,7 +152,38 @@ async def generate_improvements(
             SUM(CASE WHEN cx_bad            THEN 1 ELSE 0 END)        AS cx_bad_count
         FROM latest
     """)
-    tr = (await db.execute(ticket_sql, {"uid": str(user.id)})).mappings().first() or {}
+    tr_res, ar_res, mr_res = await asyncio.gather(
+        db.execute(ticket_sql, {"uid": str(user.id)}),
+        db.execute(text("""
+            WITH latest AS (
+                SELECT DISTINCT ON (e.ticket_id, e.user_id)
+                    e.churn_risk_flag, e.churn_confirmed, t.arr, t.company_id
+                FROM evaluations e
+                JOIN tickets t ON t.id=e.ticket_id AND t.user_id=e.user_id
+                WHERE e.user_id=:uid
+                ORDER BY e.ticket_id, e.user_id, e.id DESC
+            )
+            SELECT
+                SUM(CASE WHEN churn_confirmed THEN 1 ELSE 0 END)          AS confirmed_churn,
+                SUM(CASE WHEN churn_risk_flag AND arr IS NOT NULL
+                         THEN arr ELSE 0 END)                              AS arr_at_risk,
+                COUNT(DISTINCT CASE WHEN churn_risk_flag AND company_id IS NOT NULL
+                               THEN company_id END)                        AS companies_at_risk
+            FROM latest
+        """), {"uid": str(user.id)}),
+        db.execute(text("""
+            WITH latest AS (
+                SELECT DISTINCT ON (ticket_id, user_id) cx_bad, total_score
+                FROM evaluations WHERE user_id=:uid
+                ORDER BY ticket_id, user_id, id DESC
+            )
+            SELECT
+                SUM(CASE WHEN cx_bad THEN 1 ELSE 0 END)                   AS cx_bad_total,
+                SUM(CASE WHEN cx_bad AND total_score>=75 THEN 1 ELSE 0 END) AS mismatch
+            FROM latest
+        """), {"uid": str(user.id)}),
+    )
+    tr = tr_res.mappings().first() or {}
     total         = int(tr.get("total") or 0)
     if not total:
         raise HTTPException(422, "No evaluated tickets found. Run an analysis first.")
@@ -164,42 +195,12 @@ async def generate_improvements(
     contact_pct   = round(int(tr.get("contact_count") or 0) / total * 100, 1)
     cx_bad_pct    = round(int(tr.get("cx_bad_count")  or 0) / total * 100, 1)
 
-    # ── 2. ARR + confirmed churn ──────────────────────────────────────────────
-    arr_sql = text("""
-        WITH latest AS (
-            SELECT DISTINCT ON (e.ticket_id, e.user_id)
-                e.churn_risk_flag, e.churn_confirmed, t.arr, t.company_id
-            FROM evaluations e
-            JOIN tickets t ON t.id=e.ticket_id AND t.user_id=e.user_id
-            WHERE e.user_id=:uid
-            ORDER BY e.ticket_id, e.user_id, e.id DESC
-        )
-        SELECT
-            SUM(CASE WHEN churn_confirmed THEN 1 ELSE 0 END)          AS confirmed_churn,
-            SUM(CASE WHEN churn_risk_flag AND arr IS NOT NULL
-                     THEN arr ELSE 0 END)                              AS arr_at_risk,
-            COUNT(DISTINCT CASE WHEN churn_risk_flag AND company_id IS NOT NULL
-                           THEN company_id END)                        AS companies_at_risk
-        FROM latest
-    """)
-    ar = (await db.execute(arr_sql, {"uid": str(user.id)})).mappings().first() or {}
+    ar = ar_res.mappings().first() or {}
     confirmed_churn  = int(ar.get("confirmed_churn")  or 0)
     arr_at_risk      = float(ar.get("arr_at_risk")     or 0)
     companies_at_risk = int(ar.get("companies_at_risk") or 0)
 
-    # ── 3. Mismatch ───────────────────────────────────────────────────────────
-    mismatch_sql = text("""
-        WITH latest AS (
-            SELECT DISTINCT ON (ticket_id, user_id) cx_bad, total_score
-            FROM evaluations WHERE user_id=:uid
-            ORDER BY ticket_id, user_id, id DESC
-        )
-        SELECT
-            SUM(CASE WHEN cx_bad THEN 1 ELSE 0 END)                   AS cx_bad_total,
-            SUM(CASE WHEN cx_bad AND total_score>=75 THEN 1 ELSE 0 END) AS mismatch
-        FROM latest
-    """)
-    mr = (await db.execute(mismatch_sql, {"uid": str(user.id)})).mappings().first() or {}
+    mr = mr_res.mappings().first() or {}
     mismatch_count = int(mr.get("mismatch") or 0)
 
     # ── 4. QA dimension averages ──────────────────────────────────────────────
