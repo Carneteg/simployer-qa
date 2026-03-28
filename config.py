@@ -8,7 +8,9 @@ class Settings(BaseSettings):
 
     # Redis/Valkey — Render Starter plan (Frankfurt, EU Central)
     # Valkey 8.1.4 | 256 MB RAM | 250 connections | persistence enabled
-    redis_url: str = "redis://localhost:6379"
+    # Render Starter plan — Frankfurt (EU Central), Valkey 8.1.4
+    # Internal URL: only reachable from services in the same region
+    redis_url: str = "redis://red-d73m16u3jp1c738l8tmg:6379"
 
     # Auth
     secret_key: str = "change-me-in-production-use-secrets-token-hex-32"
