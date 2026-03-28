@@ -3101,31 +3101,45 @@ function _renderFqa(d) {
 
   // ── Section 1: Ticket scorecard ────────────────────────────────────────────
   const tCats = ts.categories || {};
-  document.getElementById('fqa-t-score').innerHTML =
-    `<span style="color:${scoreColor(ts.average_score/20||0)}">${ts.average_score||'—'}/5</span>`+
-    (ts.verdict ? ` <span style="font-size:11px;color:var(--dim)">· ${ts.verdict}</span>` : '');
+  const _allNoData = Object.values(tCats).every(v => _noData(v));
+  document.getElementById('fqa-t-score').innerHTML = _allNoData
+    ? `<span style="color:var(--dim);font-size:13px;font-style:italic">No conversation data</span>`
+    : `<span style="color:${scoreColor(ts.average_score/20||0)}">${ts.average_score||'—'}/5</span>`+
+      (ts.verdict ? ` <span style="font-size:11px;color:var(--dim)">· ${ts.verdict}</span>` : '');
 
+  const _noData = (v) => !v || v.score === 0 && (
+    (v.evidence||'').toLowerCase().includes('insufficient') ||
+    (v.evidence||'').toLowerCase().includes('no conversation') ||
+    (v.evidence||'').toLowerCase().includes('not enough data')
+  );
   document.getElementById('fqa-t-tbody').innerHTML =
-    Object.entries(tCats).map(([key, v]) => `
-      <tr style="border-bottom:1px solid var(--bdr)">
+    Object.entries(tCats).map(([key, v]) => {
+      const nd = _noData(v);
+      const scoreHTML = nd
+        ? `<span style="font-family:var(--mono);font-size:14px;color:var(--dim)">—</span>`
+        : `<span style="display:inline-block;padding:2px 9px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>`;
+      const evidenceHTML = nd
+        ? `<span style="color:var(--dim);font-style:italic">No conversation data available</span>`
+        : (v.evidence||'—');
+      return `<tr style="border-bottom:1px solid var(--bdr);opacity:${nd?0.5:1}">
         <td style="padding:8px 12px;font-size:12px;white-space:nowrap">${FQA_TICKET_LABELS[key]||key}</td>
-        <td style="padding:8px 12px;text-align:center">
-          <span style="display:inline-block;padding:2px 9px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:700;background:${scoreBg(v.score)};color:${scoreColor(v.score)}">${v.score}/5</span>
-        </td>
-        <td style="padding:8px 12px;font-size:12px;color:var(--dim);line-height:1.5">${v.evidence||'—'}</td>
-      </tr>`).join('');
+        <td style="padding:8px 12px;text-align:center">${scoreHTML}</td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--dim);line-height:1.5">${evidenceHTML}</td>
+      </tr>`;
+    }).join('');
 
   // Strengths/weaknesses
-  const str3  = (ts.strengths||[]).filter(Boolean);
-  const wk3   = (ts.weaknesses||[]).filter(Boolean);
+  const _isInsuf = s => !s || s.toLowerCase().includes('insufficient') || s.toLowerCase().includes('no conversation') || s.toLowerCase().includes('not enough');
+  const str3 = (ts.strengths||[]).filter(s => Boolean(s) && !_isInsuf(s));
+  const wk3  = (ts.weaknesses||[]).filter(s => Boolean(s) && !_isInsuf(s));
   document.getElementById('fqa-t-sw').innerHTML = `
     <div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px 12px">
       <div style="font-size:10px;color:var(--ok);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✓ Strengths</div>
-      <ul style="margin:0;padding-left:16px;line-height:1.8">${str3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">${str3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">${_allNoData?"Requires conversation data":"None identified"}</li>'}</ul>
     </div>
     <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 12px">
       <div style="font-size:10px;color:var(--danger);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✕ Weaknesses</div>
-      <ul style="margin:0;padding-left:16px;line-height:1.8">${wk3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">None identified</li>'}</ul>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">${wk3.map(s=>`<li style="font-size:12px">${s}</li>`).join('')||'<li style="font-size:12px;color:var(--dim)">${_allNoData?"Requires conversation data":"None identified"}</li>'}</ul>
     </div>`;
 
   // ── Section 2: Agent scorecard ─────────────────────────────────────────────
@@ -3559,9 +3573,9 @@ function _renderSc2(d) {
       </td>
       <td style="padding:10px 12px;text-align:center;font-size:11px;color:var(--dim)">${SC2_WEIGHTS[key]}</td>
       <td style="padding:10px 12px;text-align:center">
-        <span style="display:inline-block;padding:3px 10px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;background:${scoreCol === 'var(--ok)' ? 'rgba(52,211,153,.15)' : scoreCol === 'var(--warn)' ? 'rgba(251,191,36,.15)' : 'rgba(248,113,113,.15)'};color:${scoreCol}">
-          ${catScore != null ? Math.round(catScore) : '—'}
-        </span>
+        ${(catScore != null && catScore > 0)
+          ? `<span style="display:inline-block;padding:3px 10px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;background:${scoreCol === 'var(--ok)' ? 'rgba(52,211,153,.15)' : scoreCol === 'var(--warn)' ? 'rgba(251,191,36,.15)' : 'rgba(248,113,113,.15)'};color:${scoreCol}">${Math.round(catScore)}</span>`
+          : `<span style="font-family:var(--mono);font-size:14px;color:var(--dim)">—</span>`}
         ${catConf != null ? `<div style="font-size:10px;color:${confCol};margin-top:3px">${Math.round(catConf)}% conf</div>` : ''}
       </td>
       <td style="padding:10px 12px;font-size:12px;color:var(--dim);line-height:1.5">
