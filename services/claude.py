@@ -64,7 +64,16 @@ def _build_prompt(ticket: Dict, thread: List[Dict]) -> str:
         f"CSAT:{csat} SLA:{ticket.get('fr_escalated', False)} "
         f"Reopen:{ticket.get('nr_escalated', False)}\n\n"
         f"CONVERSATION:\n{trimmed}\n\n"
-        f"Score the agent 1-5 for each category. total_score = avg_of_8 × 20.\n"
+        f"Score the agent 1-5 for each category. total_score = avg_of_8 × 20.\n\n"
+        f"CHURN RISK — set churn_risk_flag:true ONLY if the customer EXPLICITLY states:\n"
+        f"  - Intent to cancel their subscription or contract\n"
+        f"  - They are switching to a competitor or evaluating alternatives\n"
+        f"  - Severe dissatisfaction with a direct threat to leave\n"
+        f"  - A repeated unresolved issue (e.g. third time contacting)\n"
+        f"Do NOT flag for: complaints, confusion, pricing questions, or general support.\n"
+        f"Do NOT flag based on agent quality — only explicit customer intent to leave.\n\n"
+        f"CONTACT PROBLEM — set contact_problem_flag:true ONLY if the customer explicitly\n"
+        f"  states this is a repeat contact for the same unresolved issue.\n\n"
         f"Return this JSON filled in:\n"
         f'{{"ticket_id":"{ticket["id"]}","agent":"{agent_name}","group":"{group_name}",'
         f'"arr":null,"complexity":"Low/Medium/High",'
