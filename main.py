@@ -99,11 +99,14 @@ async def log_requests(request: Request, call_next):
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router,    prefix="/auth",    tags=["auth"])
-app.include_router(runs.router,    prefix="/runs",    tags=["runs"])
-app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
-app.include_router(agents.router,  prefix="/agents",  tags=["agents"])
-app.include_router(export.router,  prefix="/export",  tags=["export"])
+app.include_router(auth.router,          prefix="/auth",          tags=["auth"])
+app.include_router(runs.router,          prefix="/runs",          tags=["runs"])
+app.include_router(tickets.router,       prefix="/tickets",       tags=["tickets"])
+app.include_router(agents.router,        prefix="/agents",        tags=["agents"])
+app.include_router(export.router,        prefix="/export",        tags=["export"])
+app.include_router(scorecard.router,     prefix="/scorecard",     tags=["scorecard"])
+app.include_router(agent_scorecard.router, prefix="/agent-scorecard", tags=["agent-scorecard"])
+app.include_router(debug.router,         prefix="/debug",         tags=["debug"])
 
 
 # ── Health check ─────────────────────────────────────────────────────────────
