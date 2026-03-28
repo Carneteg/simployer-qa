@@ -152,7 +152,46 @@ tbody td{padding:7px 9px;vertical-align:top}
 
 <!-- AGENTS -->
 <div class="tab-content" id="tab-ag">
-  <div class="tc"><div id="ag-list"></div><div id="ag-detail"><div class="card"><h3>Select an agent</h3><p style="color:var(--dim)">Click a card to view scorecard.</p></div></div></div>
+  <div class="tc">
+    <details style="margin-bottom:14px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;grid-column:1/-1">
+      <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+        <span>ℹ️</span> How are agents &amp; groups measured? <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:auto">click to expand</span>
+      </summary>
+      <div style="padding:14px;font-size:12px;line-height:1.8;color:var(--dim)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Agent QA Score (0–100)</div>
+            <p style="margin:0 0 8px">Mean QA score across all evaluated tickets. Each ticket is scored by Claude Haiku on 8 dimensions (1–5 each). Total = average × 20. Minimum 3 tickets required for a reliable average. Colour coding: 🔴 below 55 · 🟡 55–74 · 🟢 75+.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Churn Risk Rate</div>
+            <p style="margin:0 0 8px">% of this agent's tickets carrying a churn flag. Three-tier detection: Salesforce CRM tag (confirmed termination) → Claude AI inference (explicit cancellation intent) → specific keyword + ticket score &lt;70. Team baseline: 18.6%.</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Bad CX Rate</div>
+            <p style="margin:0">% of tickets with any bad CX signal: AI-detected repeat contact, conversation length &gt;2 turns, or churn flag. This is a proxy for customer friction — not a direct CSAT measurement.</p>
+          </div>
+          <div>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Group measurements</div>
+            <p style="margin:0 0 8px">Groups (Customer Care, Classic Integrations, Capitech etc.) aggregate the same metrics across all agents in that Freshdesk group. Group assignment comes from Freshdesk's group_id field, resolved against the groups API at evaluation time. Tickets with no group appear as "Unknown".</p>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Risk profile labels</div>
+            <ul style="margin:0 0 8px;padding-left:16px">
+              <li>⚠️ <strong>QA/Churn mismatch</strong> — QA ≥70 but churn ≥18.6%. High scores not preventing churn.</li>
+              <li>🔴 <strong>High risk</strong> — QA &lt;59 AND churn ≥18.6%.</li>
+              <li>🟠 <strong>Watch</strong> — churn above baseline, QA not critically low.</li>
+              <li>✅ <strong>Low risk</strong> — QA ≥70 and churn below baseline.</li>
+              <li>🟡 <strong>Average</strong> — both metrics within normal range.</li>
+            </ul>
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">What is not measured here</div>
+            <ul style="margin:0;padding-left:16px">
+              <li>Response/resolution time (in Freshdesk but not yet surfaced)</li>
+              <li>Ticket volume vs team capacity</li>
+              <li>CSAT (not currently returned by Freshdesk API)</li>
+              <li>Score trends over time (requires multiple completed runs)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </details>
+    <div id="ag-list"></div>
+    <div id="ag-detail"><div class="card"><h3>Select an agent</h3><p style="color:var(--dim)">Click a card to view scorecard.</p></div></div>
+  </div>
 </div>
 
 <!-- CHURN -->
@@ -724,6 +763,48 @@ async function showAgent(name) {
             <span style="font-size:11px;color:var(--dim)">${(t.subject||'').slice(0,60)}</span>
           </div>`
         ).join('')}</div>
+
+        <details style="margin-top:16px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+          <summary style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--s2);list-style:none;display:flex;align-items:center;gap:6px;user-select:none">
+            <span>ℹ️</span> How is this agent measured?
+          </summary>
+          <div style="padding:14px;font-size:12px;line-height:1.8;color:var(--dim)">
+
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">QA Score (0–100)</div>
+            <p style="margin:0 0 10px">Each resolved ticket is evaluated by Claude Haiku across 8 quality dimensions: <strong>Clarity &amp; Structure, Tone, Empathy, Accuracy, Resolution Quality, Efficiency, Ownership,</strong> and <strong>Commercial Awareness.</strong> Each is scored 1–5. Total score = average of 8 scores × 20. The agent QA average is the mean across all their evaluated tickets. Minimum 3 tickets required before the score is considered reliable.</p>
+
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Churn Risk Rate</div>
+            <p style="margin:0 0 6px">A ticket is flagged as churn risk when <em>at least one</em> of three signals fires:</p>
+            <ul style="margin:0 0 10px;padding-left:18px">
+              <li><strong>Tier 1 — Confirmed (Salesforce tag):</strong> A "Salesforce" tag on the Freshdesk record signals a contract termination recorded in the CRM. Overrides all other signals.</li>
+              <li><strong>Tier 2 — AI inference:</strong> Claude identified explicit cancellation intent, threat to leave, or severe dissatisfaction in the conversation.</li>
+              <li><strong>Tier 3 — Keyword + low score:</strong> A specific cancellation phrase (e.g. "si opp avtalen", "cancel my subscription") appears in customer messages AND the ticket QA score is below 70. High-quality tickets (≥70) are protected from keyword-only false positives.</li>
+            </ul>
+            <p style="margin:0 0 10px">Churn rate = flagged tickets ÷ total tickets × 100. Team baseline: <strong>18.6%</strong>.</p>
+
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Bad CX Rate</div>
+            <p style="margin:0 0 10px">Bad CX fires when any of: <strong>contact_problem_flag</strong> (AI detected a repeat contact), <strong>message count &gt; 2</strong> (long conversation), or <strong>churn_risk_flag</strong>. It is a proxy for poor customer experience, not a direct measurement.</p>
+
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Risk Profile</div>
+            <p style="margin:0 0 6px">Compares this agent's QA avg and churn rate against current team benchmarks (QA baseline: 59.0, churn baseline: 18.6%):</p>
+            <ul style="margin:0 0 10px;padding-left:18px">
+              <li><strong>⚠️ QA/Churn mismatch:</strong> QA ≥ 70 but churn ≥ 18.6% — high scores are not preventing churn. May indicate the agent handles at-risk accounts disproportionately, or the QA model is missing a behavioural pattern.</li>
+              <li><strong>🔴 High risk:</strong> QA &lt; 59 AND churn ≥ 18.6% — both quality and churn signals are poor simultaneously.</li>
+              <li><strong>🟠 Watch:</strong> Churn above baseline but QA not low enough for high risk classification.</li>
+              <li><strong>✅ Low risk:</strong> QA ≥ 70 and churn below baseline.</li>
+              <li><strong>🟡 Average:</strong> Both metrics within normal range.</li>
+            </ul>
+
+            <div style="font-weight:700;color:var(--txt);margin-bottom:4px">Limitations</div>
+            <ul style="margin:0;padding-left:18px">
+              <li>Scores are AI-generated (Claude Haiku), not human-calibrated. Use Manual Review to verify individual tickets.</li>
+              <li>Conversations are truncated to 6 turns / 200 chars before evaluation — very long tickets may be scored less accurately.</li>
+              <li>CSAT data is not available from Freshdesk, so scores cannot be validated against customer satisfaction.</li>
+              <li>A high churn rate does not always reflect service quality — agents handling termination queues will show elevated rates regardless of performance.</li>
+            </ul>
+          </div>
+        </details>
+
       </div>`;
   } catch(e) { console.error(e); }
 }
