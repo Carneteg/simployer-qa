@@ -1554,8 +1554,8 @@ function renderOv() {
 function renderTix() {
   const filtered = State.filtered;
   const page     = State._page;
-  const s = (page - 1) * PAGE_SIZE;
-  const slice = filtered.slice(s, s + PAGE_SIZE);
+  const s = (page - 1) * PS;
+  const slice = filtered.slice(s, s + PS);
   const total = _evals.length;
 
   // Update count badge
@@ -1594,7 +1594,7 @@ function renderTix() {
     </tr>`;
   }).join('');
 
-  const tp = Math.ceil(filtered.length / PAGE_SIZE);
+  const tp = Math.ceil(filtered.length / PS);
   document.getElementById('tbl-pg').innerHTML =
     `<button class="pgb" onclick="goPage(${page-1})" ${page<=1?'disabled':''}>← Prev</button>
      <span>Page ${page} / ${Math.max(tp,1)}</span>
