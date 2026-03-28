@@ -38,9 +38,9 @@ async def lifespan(app: FastAPI):
         logger.warning(f"init_db skipped: {e}")
 
     # ── 2. Stale run watchdog ─────────────────────────────────────────────────
-    # On free tier, the process can be killed mid-run (sleep / OOM / deploy).
-    # Any run still 'running' when we boot was interrupted — mark it failed so
-    # users see a clear signal and know to restart rather than waiting forever.
+    # On any restart (deploy, OOM, crash), a run in 'running' status was
+    # interrupted mid-evaluation. Mark it failed so users see a clear signal
+    # and know to start a new run rather than waiting forever.
     try:
         from sqlalchemy import select, update
         from datetime import datetime, timezone, timedelta

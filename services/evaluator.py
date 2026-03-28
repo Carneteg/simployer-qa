@@ -2,25 +2,21 @@
 Evaluator — runs a full QA analysis on Freshdesk tickets.
 
 Concurrency model:
-  - asyncio.Semaphore limits concurrent Claude calls to CLAUDE_CONCURRENCY (4)
+  - asyncio.Semaphore limits concurrent Claude calls to CLAUDE_CONCURRENCY (8)
   - asyncio.gather runs BATCH_SIZE (20) tickets at a time
   - Each batch waits for all tickets to complete before the next batch starts
-  - This gives ~4× speedup over sequential: 890 tickets × 4s avg = ~15min vs 60min
-
-  Why batching instead of all-at-once:
-  - DB commits happen after each ticket inside the semaphore — no data loss on crash
-  - Progress counter is accurate during the run (not just at the end)
-  - Freshdesk + Claude rate limits are respected via the semaphore
+  - On Starter plan (0.5 CPU): 8× concurrency gives ~8× speedup
+  - 890 tickets × ~5s avg / 8 concurrency ≈ ~9-10 min per run
 
 Performance instrumentation:
   - Per-ticket wall time logged every 10 tickets with ETA
-  - RSS memory sampled every 10 tickets, warns at >400 MB
+  - RSS memory sampled every 10 tickets, warns at >460 MB (512 MB limit)
   - Throughput telemetry written to run.error on completion
 
 Reliability:
   - Stale run watchdog in main.py marks interrupted runs failed on startup
   - Per-ticket exceptions caught and skipped (run survives individual failures)
-  - Keep-alive HTTP ping every 10 min prevents Render free tier sleep
+  - No keep-alive ping needed — Starter plan instances do not spin down
 """
 import asyncio
 import json
@@ -42,8 +38,8 @@ from services.claude import eval_ticket
 
 logger = logging.getLogger("simployer.evaluator")
 
-# ── Concurrency config ────────────────────────────────────────────────────────
-CLAUDE_CONCURRENCY = 4    # Max simultaneous Claude Haiku calls
+# ── Concurrency config (Starter plan: 0.5 CPU) ───────────────────────────────
+CLAUDE_CONCURRENCY = 8    # 8 simultaneous Haiku calls (Starter plan: 0.5 CPU)
 BATCH_SIZE         = 20   # Tickets processed per asyncio.gather batch
 
 
@@ -76,32 +72,16 @@ def _rss_mb() -> float:
         return 0.0
 
 
-async def _keep_alive(app_url: str, stop: asyncio.Event) -> None:
-    """Ping own /health every 10 min to prevent Render free tier sleep."""
-    import httpx
-    while not stop.is_set():
-        try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                await c.get(f"{app_url}/health")
-            logger.debug("Keep-alive ping OK")
-        except Exception:
-            pass
-        try:
-            await asyncio.wait_for(asyncio.shield(asyncio.sleep(600)), timeout=600)
-        except Exception:
-            pass
-
-
 # ── Per-ticket worker ─────────────────────────────────────────────────────────
 
 async def _process_ticket(
-    ticket:       dict,
-    user_id:      object,
-    run_id:       str,
-    sem:          asyncio.Semaphore,
-    counters:     dict,        # shared mutable: done, churn, errors, timings
-    total:        int,
-    run_id_uuid:  object,
+    ticket:      dict,
+    user_id:     object,
+    run_id:      str,
+    sem:         asyncio.Semaphore,
+    counters:    dict,
+    total:       int,
+    run_id_uuid: object,
 ) -> None:
     """
     Fetch conversations, upsert ticket + messages, call Claude, upsert evaluation.
@@ -110,10 +90,9 @@ async def _process_ticket(
     """
     ticket_id = str(ticket["id"])
 
-    async with sem:   # ← limits concurrency to CLAUDE_CONCURRENCY
+    async with sem:
         t0 = time.monotonic()
         try:
-            # ── Freshdesk conversations ───────────────────────────────────────
             convs    = await fetch_conversations(ticket_id)
             thread   = build_thread(ticket, convs)
             churn_kw = detect_churn(thread)
@@ -122,7 +101,6 @@ async def _process_ticket(
             updated_at  = _dt(ticket.get("updated_at"))
             resolved_at = _dt((ticket.get("stats") or {}).get("resolved_at"))
 
-            # ── DB upsert (own session — safe for concurrent use) ─────────────
             async with AsyncSessionLocal() as db:
                 stmt = pg_insert(Ticket).values(
                     id=ticket_id,
@@ -174,8 +152,7 @@ async def _process_ticket(
                     ))
                 await db.commit()
 
-            # ── Claude evaluation ─────────────────────────────────────────────
-            await asyncio.sleep(0.1)   # tiny breathe before Claude call
+            await asyncio.sleep(0.1)
             ev = await eval_ticket(ticket, thread)
 
             async with AsyncSessionLocal() as db:
@@ -207,7 +184,6 @@ async def _process_ticket(
                 ))
                 await db.commit()
 
-            # ── Update counters ───────────────────────────────────────────────
             elapsed = time.monotonic() - t0
             counters["done"]    += 1
             counters["timings"].append(elapsed)
@@ -234,9 +210,8 @@ async def _process_ticket(
 async def evaluate_run(ctx: dict, run_id: str) -> None:
     """
     Main evaluation job. Compatible with arq and FastAPI BackgroundTasks.
-    ctx["redis"] must have .publish(channel, message) — FakeRedis is fine.
+    ctx["redis"] must have .publish(channel, message) — RealRedis or FakeRedis.
     """
-    import uuid as _uuid
     redis = ctx["redis"]
 
     async with AsyncSessionLocal() as db:
@@ -251,26 +226,22 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
         run.started_at = datetime.now(timezone.utc)
         await db.commit()
 
-    # ── Keep-alive task ───────────────────────────────────────────────────────
-    from config import settings as _cfg
-    _stop    = asyncio.Event()
-    _app_url = getattr(_cfg, "app_url", "https://simployer-qa.onrender.com")
-    _ka      = asyncio.create_task(_keep_alive(_app_url, _stop))
-
     # ── Throughput / memory tracking ──────────────────────────────────────────
-    run_start  = time.monotonic()
-    mem_start  = _rss_mb()
-    mem_peak   = mem_start
-    logger.info(f"[run={run_id}] Starting — RSS {mem_start:.0f} MB")
+    run_start = time.monotonic()
+    mem_start = _rss_mb()
+    mem_peak  = mem_start
+    logger.info(
+        f"[run={run_id}] Starting — "
+        f"concurrency={CLAUDE_CONCURRENCY} batch={BATCH_SIZE} | RSS {mem_start:.0f} MB"
+    )
 
     async def _flush_progress(done: int, total: int, churn: int) -> None:
-        """Write progress to DB + push Redis event."""
         try:
             async with AsyncSessionLocal() as db:
                 run_obj = await db.get(Run, run_id_uuid)
                 if run_obj:
-                    run_obj.tickets_done  = done
-                    run_obj.churn_count   = churn
+                    run_obj.tickets_done = done
+                    run_obj.churn_count  = churn
                     await db.commit()
         except Exception:
             pass
@@ -308,7 +279,6 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
         for batch_start in range(0, len(tickets), BATCH_SIZE):
             batch = tickets[batch_start: batch_start + BATCH_SIZE]
 
-            # Launch all tickets in this batch concurrently
             await asyncio.gather(*[
                 _process_ticket(
                     ticket=t,
@@ -322,16 +292,14 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
                 for t in batch
             ])
 
-            # After each batch: flush progress + log throughput
             await _flush_progress(counters["done"], len(tickets), counters["churn"])
 
             if counters["timings"]:
-                recent   = counters["timings"][-20:]
-                avg_s    = sum(recent) / len(recent)
-                tpm      = round(60 / avg_s, 1) if avg_s > 0 else 0
+                recent    = counters["timings"][-20:]
+                avg_s     = sum(recent) / len(recent)
+                tpm       = round(60 / avg_s, 1) if avg_s > 0 else 0
                 remaining = len(tickets) - counters["done"]
-                # ETA based on effective throughput with concurrency
-                eta_min  = round((remaining / CLAUDE_CONCURRENCY) * avg_s / 60, 1)
+                eta_min   = round((remaining / CLAUDE_CONCURRENCY) * avg_s / 60, 1)
 
                 mem_now  = _rss_mb()
                 mem_peak = max(mem_peak, mem_now)
@@ -345,24 +313,20 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
                     f"errors={counters['errors']}"
                 )
 
-                if mem_now > 400:
+                if mem_now > 460:   # warn at 460 MB (512 MB limit on Starter)
                     logger.warning(
                         f"[run={run_id}] ⚠️  RSS {mem_now:.0f}MB — "
-                        f"approaching 512MB free tier limit"
+                        f"approaching 512MB RAM limit"
                     )
 
         # ── Done ─────────────────────────────────────────────────────────────
-        _stop.set()
-        total_s  = time.monotonic() - run_start
-        avg_s    = (
+        total_s       = time.monotonic() - run_start
+        avg_s         = (
             sum(counters["timings"]) / len(counters["timings"])
             if counters["timings"] else 0
         )
-        # Effective throughput accounts for concurrency
-        effective_tpm = round(
-            counters["done"] / (total_s / 60), 1
-        ) if total_s > 0 else 0
-        mem_final = _rss_mb()
+        effective_tpm = round(counters["done"] / (total_s / 60), 1) if total_s > 0 else 0
+        mem_final     = _rss_mb()
 
         telemetry = {
             "total_secs":          round(total_s),
@@ -403,7 +367,6 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
         )
 
     except Exception as e:
-        _stop.set()
         async with AsyncSessionLocal() as db:
             run_obj = await db.get(Run, run_id_uuid)
             if run_obj:

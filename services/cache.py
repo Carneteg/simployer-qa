@@ -1,17 +1,15 @@
 """
 Redis/Valkey cache service — Render Starter plan (Frankfurt, EU Central)
   Runtime:    Valkey 8.1.4
-  RAM:        256 MB  (was 25 MB — 10× increase)
-  Connections: 250    (was 50 — 5× increase)
-  Persistence: enabled (data survives restarts)
+  RAM:        256 MB RAM | 250 connection limit | persistence enabled
   Policy:     allkeys-lru
 
 Design:
-  - Single shared connection pool (max_connections=20) — well within 250 limit
+  - Connection pool: max_connections=20 (well within 250 limit)
   - Application-level caching for expensive DB queries (agents, ticket list)
-  - Pub/sub for real-time run progress (replaces DB polling)
-  - TTLs are generous now that we have 256 MB: agents 5 min, tickets 2 min
-  - No cache warming on startup needed — persistence means data survives restarts
+  - Pub/sub for real-time run progress via WebSocket
+  - TTL_AGENTS=300s, TTL_TICKETS=120s (generous — 256 MB available)
+  - No cache warming on startup — allkeys-lru persistence survives restarts
 """
 import json
 import logging
@@ -30,7 +28,7 @@ logger = logging.getLogger("simployer.cache")
 # Pool of 20 gives comfortable headroom without approaching the limit.
 _pool = aioredis.ConnectionPool.from_url(
     settings.redis_url,
-    max_connections=20,           # was artificially capped at 3 on free tier
+    max_connections=20,           # 20 of 250 available on Starter plan
     decode_responses=True,
     socket_timeout=5,             # fail fast rather than hang
     socket_connect_timeout=5,
