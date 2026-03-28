@@ -172,7 +172,13 @@ async def _process_ticket(
                     sentiment_start=(ev.get("sentiment") or {}).get("start"),
                     sentiment_end=(ev.get("sentiment") or {}).get("end"),
                     summary=ev.get("summary"),
-                    churn_risk_flag=bool(ev.get("churn_risk_flag") or churn_kw),
+                    # Dual-signal churn: Claude explicit flag OR (keyword + low score)
+                    # Prevents false positives where agent handled well but
+                    # a generic word like "si opp" appeared in the thread.
+                    churn_risk_flag=bool(
+                        ev.get("churn_risk_flag") or
+                        (churn_kw and (ev.get("total_score") or 100) < 70)
+                    ),
                     churn_risk_reason=ev.get("churn_risk_reason") or (
                         f'Signal: "{churn_kw}"' if churn_kw else None
                     ),

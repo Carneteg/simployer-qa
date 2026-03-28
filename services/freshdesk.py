@@ -13,11 +13,47 @@ logger = logging.getLogger("simployer.freshdesk")
 
 _sem = Semaphore(5)  # max 5 concurrent Freshdesk calls
 
+# ── Churn keyword detection ────────────────────────────────────────────────
+# EVIDENCE-BASED: keyword list derived from data analysis.
+#
+# REMOVED — confirmed false positives:
+#   "avslutte"   → means "to finish/complete" in everyday Norwegian
+#                  e.g. "avslutte kurs" (complete a course) — NOT cancellation
+#   "avslutning" → same root, same problem
+#   "cancel"     → too broad, catches "cancel this meeting / cancel my order"
+#   "switching"  → too broad, catches unrelated context
+#
+# KEPT — high-specificity contract/subscription cancellation signals:
 CHURN_KEYWORDS = [
-    "oppsigelse", "cancel", "avslutte", "sier opp", "avslutning",
-    "switching", "bytte system", "vurderer andre", "not satisfied",
-    "very disappointed", "tredje gang", "third time",
-    "säger upp", "avsluta", "säga upp",
+    # Norwegian — explicit contract termination
+    "si opp avtalen",
+    "sier opp",
+    "oppsigelse",
+    "avslutte abonnementet",
+    "avslutte avtalen",
+    "avslutte kundeforholdet",
+    "bytte system",
+    "vurderer andre",
+    "ikke fornøyd",
+    "tredje gang",
+
+    # Swedish — explicit contract termination
+    "säger upp",
+    "säga upp",
+    "avsluta abonnemanget",
+    "avsluta avtalet",
+    "byta system",
+
+    # English — explicit contract/subscription signals
+    "cancel my subscription",
+    "cancel our contract",
+    "cancel the agreement",
+    "cancel our account",
+    "switching to another",
+    "looking for alternatives",
+    "very disappointed",
+    "not satisfied with",
+    "third time",
 ]
 
 # In-memory caches — populated once per process lifetime
@@ -198,10 +234,20 @@ def build_thread(ticket: Dict, convs: List[Dict]) -> List[Dict]:
 
 
 def detect_churn(thread: List[Dict]) -> Optional[str]:
-    """Return the matching churn keyword if found in customer messages."""
+    """
+    Return the matching churn keyword if found in CUSTOMER messages only.
+
+    Uses phrase-level matching — all keywords are multi-word or highly specific
+    to avoid false positives from common words like "avslutte" (finish/complete).
+
+    Returns the matched keyword string, or None if no match.
+    """
+    # Only scan customer turns — agent language can contain these words innocuously
     customer_text = " ".join(
         m["body"] for m in thread if m["role"] == "CUSTOMER"
     ).lower()
+
+    # Phrase matching — substring is intentional since keywords are already specific
     return next((kw for kw in CHURN_KEYWORDS if kw in customer_text), None)
 
 
