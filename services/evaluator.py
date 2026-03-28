@@ -39,7 +39,7 @@ from services.claude import eval_ticket
 logger = logging.getLogger("simployer.evaluator")
 
 # ── Concurrency config (Starter plan: 0.5 CPU) ───────────────────────────────
-CLAUDE_CONCURRENCY = 2    # 2 simultaneous Haiku calls — stay within Haiku TPM limit
+CLAUDE_CONCURRENCY = 1    # 1 Claude call at a time — avoid all rate limit contention
 BATCH_SIZE         = 20   # Tickets processed per asyncio.gather batch
 
 
@@ -158,7 +158,7 @@ async def _process_ticket(
                     ))
                 await db.commit()
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(3)   # pace to ~20 req/min — stays within Haiku TPM
             ev = await eval_ticket(ticket, thread)
 
             async with AsyncSessionLocal() as db:
