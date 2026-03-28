@@ -1,8 +1,17 @@
+"""
+Claude API service — ticket evaluation via Haiku.
+
+Performance:
+  - Per-call latency + token usage logged on every call
+  - 25s timeout at transport level (Anthropic client) + asyncio.wait_for guard
+  - Designed for concurrent use — no shared mutable state, safe for asyncio.gather
+"""
 import asyncio
 import json
 import logging
 import re
-from typing import Dict, List, Any, Optional
+import time
+from typing import Dict, List
 
 import anthropic
 
@@ -10,7 +19,11 @@ from config import settings
 
 logger = logging.getLogger("simployer.claude")
 
-_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+# Single shared async client — thread-safe for concurrent coroutines
+_client = anthropic.AsyncAnthropic(
+    api_key=settings.anthropic_api_key,
+    timeout=25.0,   # Hard transport-level timeout — prevents hangs
+)
 
 CATEGORIES = [
     "clarity_structure",
@@ -36,17 +49,15 @@ SYSTEM_PROMPT = (
 
 
 def _build_prompt(ticket: Dict, thread: List[Dict]) -> str:
-    agent_name = (ticket.get("responder") or {}).get("name", "Unknown")
-    group_name = (ticket.get("group") or {}).get("name", "Unknown")
-    csat = (ticket.get("satisfaction_rating") or {}).get("rating", "N/A")
+    agent_name = ticket.get("_agent_name") or (ticket.get("responder") or {}).get("name", "Unknown")
+    group_name = ticket.get("_group_name") or (ticket.get("group") or {}).get("name", "Unknown")
+    csat       = (ticket.get("satisfaction_rating") or {}).get("rating", "N/A")
 
-    # Truncate aggressively: 6 turns, 200 chars each
+    # Truncate aggressively: 6 turns, 200 chars each — keeps tokens predictable
     trimmed = "\n".join(
         f"{m['role'][0]}: {m['body'].replace(chr(10), ' ')[:200]}"
         for m in thread[:6]
     )
-
-    scores_template = json.dumps(EMPTY_SCORES)
 
     return (
         f"Ticket:{ticket['id']} Agent:{agent_name} Group:{group_name} "
@@ -58,7 +69,7 @@ def _build_prompt(ticket: Dict, thread: List[Dict]) -> str:
         f'{{"ticket_id":"{ticket["id"]}","agent":"{agent_name}","group":"{group_name}",'
         f'"arr":null,"complexity":"Low/Medium/High",'
         f'"sentiment":{{"start":"Neutral","end":"Neutral"}},'
-        f'"scores":{scores_template},'
+        f'"scores":{json.dumps(EMPTY_SCORES)},'
         f'"total_score":60,"summary":"","strengths":[""],"improvements":[""],'
         f'"churn_risk_flag":false,"churn_risk_reason":null,'
         f'"contact_problem_flag":false,"coaching_tip":""}}'
@@ -69,13 +80,13 @@ def _repair_json(txt: str) -> str:
     """Attempt to close truncated JSON."""
     txt = txt.strip()
     txt = re.sub(r"^```json\s*", "", txt)
-    txt = re.sub(r"^```\s*", "", txt)
-    txt = re.sub(r"```\s*$", "", txt)
+    txt = re.sub(r"^```\s*",     "", txt)
+    txt = re.sub(r"```\s*$",     "", txt)
     txt = txt.strip()
     if not txt.endswith("}"):
-        opens = txt.count("{")
+        opens  = txt.count("{")
         closes = txt.count("}")
-        diff = opens - closes
+        diff   = opens - closes
         if 0 < diff <= 6:
             if txt.count('"') % 2 != 0:
                 txt += '"'
@@ -96,55 +107,103 @@ def _normalise(ev: Dict) -> Dict:
     ev["scores"]["clarity"] = ev["scores"].get("clarity_structure")
     ev["scores"]["tone"]    = ev["scores"].get("tone_professionalism")
 
-    ev.setdefault("summary", "")
-    ev.setdefault("strengths", [])
-    ev.setdefault("improvements", [])
-    ev.setdefault("churn_risk_flag", False)
-    ev.setdefault("churn_risk_reason", None)
-    ev.setdefault("contact_problem_flag", False)
-    ev.setdefault("coaching_tip", "")
-    ev.setdefault("arr", None)
-    ev.setdefault("complexity", "Medium")
-    ev.setdefault("sentiment", {"start": "Neutral", "end": "Neutral"})
+    ev.setdefault("summary",               "")
+    ev.setdefault("strengths",             [])
+    ev.setdefault("improvements",          [])
+    ev.setdefault("churn_risk_flag",       False)
+    ev.setdefault("churn_risk_reason",     None)
+    ev.setdefault("contact_problem_flag",  False)
+    ev.setdefault("coaching_tip",          "")
+    ev.setdefault("arr",                   None)
+    ev.setdefault("complexity",            "Medium")
+    ev.setdefault("sentiment",             {"start": "Neutral", "end": "Neutral"})
     return ev
 
 
 async def eval_ticket(ticket: Dict, thread: List[Dict], retries: int = 5) -> Dict:
     """
-    Call Claude Haiku to evaluate a ticket.
-    Returns a normalised evaluation dict.
+    Call Claude Haiku to evaluate a single ticket.
+    
+    - Logs latency + token usage on every call
+    - 25s timeout at client level + asyncio.wait_for guard
+    - Safe to call concurrently — no shared mutable state
     """
-    prompt = _build_prompt(ticket, thread)
+    prompt     = _build_prompt(ticket, thread)
+    ticket_id  = ticket.get("id", "?")
 
     for attempt in range(retries):
+        t0 = time.monotonic()
         try:
-            response = await _client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1200,
-                temperature=0,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+            response = await asyncio.wait_for(
+                _client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1200,
+                    temperature=0,
+                    system=SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": prompt}],
+                ),
+                timeout=25.0,
             )
+
+            latency_ms    = round((time.monotonic() - t0) * 1000)
+            input_tokens  = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+
+            logger.debug(
+                f"claude haiku #{ticket_id} — "
+                f"{latency_ms}ms | in={input_tokens} out={output_tokens} tokens"
+            )
+
+            # Warn on prompt bloat (input > 1500 tokens is suspicious for Haiku)
+            if input_tokens > 1500:
+                logger.warning(
+                    f"claude #{ticket_id} — large prompt: {input_tokens} input tokens. "
+                    f"Check thread truncation."
+                )
+
             raw = response.content[0].text
             txt = _repair_json(raw)
-            ev = json.loads(txt)
+            ev  = json.loads(txt)
             return _normalise(ev)
+
+        except asyncio.TimeoutError:
+            latency_ms = round((time.monotonic() - t0) * 1000)
+            logger.warning(
+                f"claude #{ticket_id} — TIMEOUT after {latency_ms}ms "
+                f"(attempt {attempt + 1}/{retries})"
+            )
+            if attempt == retries - 1:
+                logger.error(f"claude #{ticket_id} — all {retries} attempts timed out")
+                return _normalise({})   # Return empty eval rather than crashing the run
+            await asyncio.sleep(2 ** attempt)
 
         except anthropic.RateLimitError:
             wait = 2 ** (attempt + 3)
-            logger.warning(f"Claude 429 — waiting {wait}s (attempt {attempt + 1})")
+            logger.warning(
+                f"claude #{ticket_id} — 429 rate limit, waiting {wait}s "
+                f"(attempt {attempt + 1}/{retries})"
+            )
             await asyncio.sleep(wait)
 
         except json.JSONDecodeError as e:
-            logger.warning(f"JSON parse failed (attempt {attempt + 1}): {e}")
+            latency_ms = round((time.monotonic() - t0) * 1000)
+            logger.warning(
+                f"claude #{ticket_id} — JSON parse failed in {latency_ms}ms "
+                f"(attempt {attempt + 1}): {e}"
+            )
             if attempt < retries - 1:
                 await asyncio.sleep(3)
             else:
                 raise
 
         except Exception as e:
+            latency_ms = round((time.monotonic() - t0) * 1000)
+            logger.error(
+                f"claude #{ticket_id} — error in {latency_ms}ms "
+                f"(attempt {attempt + 1}): {type(e).__name__}: {e}"
+            )
             if attempt == retries - 1:
                 raise
             await asyncio.sleep(2)
 
-    raise RuntimeError("Claude eval max retries exceeded")
+    raise RuntimeError(f"Claude eval max retries exceeded for #{ticket_id}")
