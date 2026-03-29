@@ -126,6 +126,33 @@ def _should_exclude(ticket: dict) -> tuple[bool, str]:
 
 # ── Per-ticket worker ─────────────────────────────────────────────────────────
 
+def _parse_csat(sr: dict | None) -> int | None:
+    """
+    Convert Freshdesk satisfaction_rating object → integer 1-4.
+
+    Freshdesk returns:
+      satisfaction_rating.ratings.default_question = "unhappy"|"neutral"|"happy"|"extremely_happy"
+    
+    We store: 1=Unhappy, 2=Neutral, 3=Happy, 4=Extremely Happy
+    """
+    if not sr:
+        return None
+    ratings = sr.get("ratings") or {}
+    raw = ratings.get("default_question") or ratings.get("default_question_rating")
+    if raw is None:
+        return None
+    mapping = {
+        "unhappy":         1,
+        "neutral":         2,
+        "somewhat_happy":  2,
+        "happy":           3,
+        "extremely_happy": 4,
+    }
+    if isinstance(raw, int):
+        return raw if 1 <= raw <= 5 else None
+    return mapping.get(str(raw).lower().strip())
+
+
 async def _process_ticket(
     ticket:      dict,
     user_id:     object,
@@ -184,7 +211,7 @@ async def _process_ticket(
                     ),
                     status=ticket.get("status"),
                     priority=ticket.get("priority"),
-                    csat=(ticket.get("satisfaction_rating") or {}).get("rating"),
+                    csat=_parse_csat(ticket.get("satisfaction_rating")),
                     tags=ticket.get("tags") or [],
                     fr_escalated=bool(ticket.get("fr_escalated")),
                     nr_escalated=bool(ticket.get("nr_escalated")),

@@ -154,3 +154,73 @@ async def get_run(
     if not run or run.user_id != user.id:
         raise HTTPException(404, "Run not found")
     return RunOut.from_orm(run)
+
+
+@router.post("/backfill-csat")
+async def backfill_csat(
+    days_back: int = 30,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Fetch CSAT scores from Freshdesk and patch existing Ticket records.
+
+    Does NOT re-run AI evaluation — only updates the csat column.
+    Run this once after the CSAT ingestion fix to backfill historical data.
+    """
+    from sqlalchemy import select, update
+    from models import Ticket
+    from services.freshdesk import fetch_all_tickets
+    from services.evaluator import _parse_csat
+
+    # Fetch tickets from Freshdesk (now includes satisfaction_ratings)
+    try:
+        fd_tickets = await fetch_all_tickets(days_back=days_back)
+    except Exception as e:
+        raise HTTPException(500, f"Freshdesk fetch failed: {e}")
+
+    # Build map of ticket_id → csat int
+    csat_map: dict = {}
+    for t in fd_tickets:
+        tid = str(t["id"])
+        csat_val = _parse_csat(t.get("satisfaction_rating"))
+        if csat_val is not None:
+            csat_map[tid] = csat_val
+
+    if not csat_map:
+        return {"updated": 0, "message": "No CSAT data found in Freshdesk response. Check that CSAT surveys are enabled."}
+
+    # Bulk-update DB — only tickets owned by this user that have a csat value
+    result = await db.execute(
+        select(Ticket).where(Ticket.user_id == user.id)
+    )
+    tickets = result.scalars().all()
+
+    updated = 0
+    for ticket in tickets:
+        tid = str(ticket.ticket_id)
+        if tid in csat_map:
+            ticket.csat = csat_map[tid]
+            updated += 1
+
+    await db.commit()
+
+    # Also invalidate any relevant Redis caches that include csat
+    try:
+        from database import redis_client
+        async with redis_client() as r:
+            # Scorecard and agent scorecard caches include csat
+            keys = await r.keys(f"sc2:{user.id}:*")
+            keys += await r.keys(f"asc:{user.id}:*")
+            keys += await r.keys(f"qaf:{user.id}:*")
+            if keys:
+                await r.delete(*keys)
+    except Exception:
+        pass  # cache invalidation is best-effort
+
+    return {
+        "updated": updated,
+        "csat_found_in_freshdesk": len(csat_map),
+        "tickets_in_db": len(tickets),
+        "message": f"Backfilled CSAT for {updated} tickets from {len(csat_map)} Freshdesk responses.",
+    }

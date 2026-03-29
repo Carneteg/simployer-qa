@@ -480,6 +480,39 @@ details[open] summary::after { content: ' ▴'; }
   <div class="panel"><h3>Run History</h3>
     <div class="run-hist" id="run-hist">Loading...</div>
   </div>
+  <div class="panel">
+    <h3>🔧 Data Tools</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+      Backfill or repair specific data fields without re-running full AI evaluations.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- Backfill CSAT -->
+      <div style="padding:14px 16px;border:1px solid var(--bdr);border-radius:var(--r-md);background:var(--bg)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+          <div>
+            <div style="font-weight:700;font-size:13px;margin-bottom:3px">📊 Backfill CSAT Scores</div>
+            <div style="font-size:12px;color:var(--dim)">
+              Fetch satisfaction ratings from Freshdesk and patch existing tickets.
+              No AI calls — DB update only.
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <select id="csat-days" style="padding:5px 8px;border:1px solid var(--bdr);border-radius:var(--r-sm);font-size:12px;background:var(--bg);color:var(--txt)">
+              <option value="30">Last 30 days</option>
+              <option value="60">Last 60 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="180">Last 6 months</option>
+              <option value="365">Full year</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="runBackfillCsat()" id="csat-backfill-btn">
+              Run Backfill
+            </button>
+          </div>
+        </div>
+        <div id="csat-backfill-result" style="display:none;margin-top:10px;padding:9px 12px;border-radius:var(--r-sm);font-size:12px;font-family:var(--mono)"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- EXPORT -->
@@ -2076,6 +2109,43 @@ async function startRun() {
     btn.disabled = false; btn.textContent = '▶ Start Analysis';
   }
 }
+
+async function runBackfillCsat() {
+  const days  = parseInt(document.getElementById('csat-days').value) || 30;
+  const btn   = document.getElementById('csat-backfill-btn');
+  const res   = document.getElementById('csat-backfill-result');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  res.style.display = 'none';
+  try {
+    const data = await apiFetch(`/runs/backfill-csat?days_back=${days}`, { method: 'POST' });
+    res.style.display = 'block';
+    if (data.updated > 0) {
+      res.style.background = 'rgba(34,197,94,.1)';
+      res.style.border = '1px solid rgba(34,197,94,.3)';
+      res.style.color = 'var(--ok)';
+      res.textContent = `✓ ${data.message}`;
+      // Reload evals to pick up new CSAT values
+      await loadEvals();
+      renderTix();
+    } else {
+      res.style.background = 'rgba(251,191,36,.1)';
+      res.style.border = '1px solid rgba(251,191,36,.3)';
+      res.style.color = 'var(--warn)';
+      res.textContent = `⚠ ${data.message}`;
+    }
+  } catch(e) {
+    res.style.display = 'block';
+    res.style.background = 'rgba(248,113,113,.1)';
+    res.style.border = '1px solid rgba(248,113,113,.3)';
+    res.style.color = 'var(--danger)';
+    res.textContent = 'Error: ' + (e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Backfill';
+  }
+}
+
 
 function openRunSocket(runId) {
   const wsUrl = `${API.replace('http','ws')}/ws/runs/${runId}`;
