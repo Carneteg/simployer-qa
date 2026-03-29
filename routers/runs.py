@@ -198,7 +198,7 @@ async def backfill_csat(
 
     updated = 0
     for ticket in tickets:
-        tid = str(ticket.ticket_id)
+        tid = str(ticket.id)
         if tid in csat_map:
             ticket.csat = csat_map[tid]
             updated += 1

@@ -335,7 +335,7 @@ def frt_minutes(ticket: Dict) -> Optional[int]:
         return None
 
 
-async def fetch_all_csat_ratings(days_back: int = 180) -> tuple[dict, dict]:
+async def fetch_all_csat_ratings(days_back: int = 180):  # -> (csat_map, debug_info)
     """
     Fetch all satisfaction ratings from Freshdesk surveys endpoint.
     Returns (csat_map, debug_info) where csat_map is ticket_id(str) → int.
@@ -388,7 +388,7 @@ async def fetch_all_csat_ratings(days_back: int = 180) -> tuple[dict, dict]:
     return result, debug
 
 
-def _parse_csat_ratings(ratings: dict | None) -> int | None:
+def _parse_csat_ratings(ratings) -> "int | None":
     """
     Parse Freshdesk ratings dict → int 1-4.
 
@@ -436,7 +436,7 @@ def _parse_csat_ratings(ratings: dict | None) -> int | None:
     return string_map.get(str(raw).lower().strip())
 
 
-async def fetch_ticket_csat(ticket_id: str) -> int | None:
+async def fetch_ticket_csat(ticket_id: str):
     """Fetch CSAT for a single ticket via the individual ticket endpoint."""
     try:
         url = f"https://{settings.freshdesk_domain}/api/v2/tickets/{ticket_id}"

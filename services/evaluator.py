@@ -127,7 +127,7 @@ def _should_exclude(ticket: dict) -> tuple[bool, str]:
 
 # ── Per-ticket worker ─────────────────────────────────────────────────────────
 
-def _parse_csat(sr: dict | None) -> int | None:
+def _parse_csat(sr) -> "int | None":
     """Thin wrapper around _parse_csat_ratings for legacy call sites."""
     if not sr:
         return None
