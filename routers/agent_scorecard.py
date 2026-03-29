@@ -15,12 +15,15 @@ from config import settings
 from database import get_db
 from models import User, Ticket, Evaluation, Message
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set
 
 router = APIRouter()
-# 30s hard timeout — surface as HTTP 504 rather than hanging indefinitely
+TTL_AGREV = 300   # 5 min cache — agent pattern analysis is stable
+
+# 55s hard timeout — Sonnet on large agent datasets needs breathing room
 _client = AsyncAnthropic(
     api_key=settings.anthropic_api_key,
-    timeout=30.0,
+    timeout=55.0,
 )
 
 SYSTEM = (
@@ -102,18 +105,18 @@ def _build_dataset(tickets_data: list, messages_map: dict) -> str:
     """Build a compact dataset string from tickets + their conversation samples."""
     lines = []
     total = len(tickets_data)
-    used  = min(total, 30)
+    used  = min(total, 20)
     lines.append(
         f"Dataset: {total} total tickets | {used} included below | "
-        f"{'ALL tickets included' if total <= 30 else f'30 of {total} shown (lowest-scoring first)'}"
+        f"{'ALL tickets included' if total <= 20 else f'20 of {total} shown (lowest-scoring first)'}"
     )
     lines.append("")
-    for i, t in enumerate(tickets_data[:30]):  # cap at 30 — within Sonnet 200K context
+    for i, t in enumerate(tickets_data[:20]):  # cap at 20 — faster generation
         tid = str(t["ticket_id"])
         msgs = messages_map.get(tid, [])
         # Take first 2 agent messages as sample
         agent_msgs = [m for m in msgs if m.role == "AGENT"][:2]
-        sample = " | ".join(m.body[:150].replace("\n", " ") for m in agent_msgs) or "No messages available"
+        sample = " | ".join(m.body[:80].replace("\n", " ") for m in agent_msgs) or "No messages available"
 
         lines.append(
             f"[{i+1}] #{tid} | Subject: {t['subject'] or 'N/A'} | "
@@ -121,8 +124,8 @@ def _build_dataset(tickets_data: list, messages_map: dict) -> str:
             f"Churn: {'Yes' if t['churn_risk_flag'] else 'No'} | "
             f"Contact problem: {'Yes' if t['contact_problem_flag'] else 'No'}\n"
             f"    Agent sample: {sample}\n"
-            f"    Summary: {(t['summary'] or 'N/A')[:200]}\n"
-            f"    Coaching note: {(t['coaching_tip'] or 'N/A')[:150]}"
+            f"    Summary: {(t['summary'] or 'N/A')[:100]}\n"
+            f"    Coaching: {(t['coaching_tip'] or 'N/A')[:80]}"
         )
     return "\n\n".join(lines)
 
@@ -138,6 +141,12 @@ async def generate_agent_scorecard(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Cache check ──────────────────────────────────────────────────────────
+    cache_key = f"agrev:{user.id}:{body.agent_name}:{body.run_id or 'all'}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     # Load agent's tickets
     q = (
         select(
@@ -208,24 +217,24 @@ async def generate_agent_scorecard(
         churn_pct=churn_pct,
         csat_count=len(csat_vals),
         avg_csat=avg_csat or "Not available",
-        dataset=dataset[:8000],  # Sonnet 200K context — safe at 8K chars
+        dataset=dataset[:5000],  # Sonnet 200K context — safe at 8K chars
     )
 
     try:
         response = await asyncio.wait_for(
             _client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=2500,
+                max_tokens=1800,
                 temperature=0,
                 system=SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             ),
-            timeout=30.0,
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=504,
-            detail="Scorecard generation timed out (>30s). Try a shorter ticket or retry."
+            detail="Agent scorecard timed out. The agent has many tickets — retry or try filtering by run."
         )
     raw = response.content[0].text
     data = json.loads(_repair(raw))
@@ -258,4 +267,5 @@ async def generate_agent_scorecard(
         "avg_csat": avg_csat,
     }
 
+    await cache_set(cache_key, data, TTL_AGREV)
     return data
