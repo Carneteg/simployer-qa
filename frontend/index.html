@@ -178,6 +178,7 @@ tbody td{padding:7px 9px;vertical-align:top}
   <div class="tab" onclick="showTab('iqa')">Issue Analysis</div>
   <div class="tab" onclick="showTab('sc2')">QA Scorecard</div>
   <div class="tab" onclick="showTab('ci')">Customer Intel</div>
+  <div class="tab" onclick="showTab('excl')">Exclusions</div>
 </div>
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
@@ -1254,6 +1255,131 @@ tbody td{padding:7px 9px;vertical-align:top}
   </div>
 </div>
 
+<!-- EXCLUSIONS -->
+<div class="tab-content" id="tab-excl">
+  <div style="max-width:980px;margin:0 auto">
+
+    <!-- Header -->
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:15px;font-weight:800;margin-bottom:3px">Exclusion Management</div>
+        <div style="font-size:12px;color:var(--dim)">Spam, Talkdesk calls, no-reply and system tickets are auto-excluded from QA scoring. Manage rules and override any ticket manually.</div>
+      </div>
+      <div id="excl-stats" style="display:flex;gap:14px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- Two-column layout -->
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start">
+
+      <!-- LEFT: Rules editor -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Auto-Exclusion Rules</span>
+          <button class="btn btn-outline btn-sm" onclick="exclSaveRules()" id="excl-save-btn">Save Rules</button>
+        </div>
+        <div style="padding:14px">
+          <div style="font-size:11px;color:var(--dim);margin-bottom:12px;line-height:1.6">
+            Tickets matching ANY rule are automatically excluded from QA runs. Rules apply to new runs — use <strong>Apply to All</strong> to rescan existing tickets.
+          </div>
+
+          <!-- Tags -->
+          <div style="margin-bottom:14px">
+            <label style="font-size:11px;font-weight:700;color:var(--txt);display:block;margin-bottom:5px">
+              Exclude by tag
+              <span style="font-weight:400;color:var(--dim);margin-left:4px">— one per line</span>
+            </label>
+            <textarea id="excl-tags" rows="8"
+              style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:8px 10px;color:var(--txt);font-family:var(--mono);font-size:11px;resize:vertical;outline:none;box-sizing:border-box;line-height:1.7"
+              placeholder="talkdesk&#10;call_finished&#10;spam&#10;voicemail"></textarea>
+          </div>
+
+          <!-- Subject prefixes -->
+          <div style="margin-bottom:14px">
+            <label style="font-size:11px;font-weight:700;color:var(--txt);display:block;margin-bottom:5px">
+              Exclude by subject prefix
+              <span style="font-weight:400;color:var(--dim);margin-left:4px">— one per line</span>
+            </label>
+            <textarea id="excl-prefixes" rows="6"
+              style="width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:8px 10px;color:var(--txt);font-family:var(--mono);font-size:11px;resize:vertical;outline:none;box-sizing:border-box;line-height:1.7"
+              placeholder="auto:&#10;automatic reply:&#10;out of office:"></textarea>
+          </div>
+
+          <!-- Toggles -->
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px">
+              <input type="checkbox" id="excl-no-msg" style="width:14px;height:14px;cursor:pointer">
+              Exclude tickets with zero messages
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px">
+              <input type="checkbox" id="excl-phone" style="width:14px;height:14px;cursor:pointer">
+              Exclude phone/Talkdesk source (source=3)
+            </label>
+          </div>
+
+          <!-- Apply button -->
+          <div style="border-top:1px solid var(--bdr);padding-top:12px">
+            <button class="btn btn-outline" style="width:100%;font-size:12px" onclick="exclApplyRules()" id="excl-apply-btn">
+              ↺ Apply Rules to All Existing Tickets
+            </button>
+            <div style="font-size:10px;color:var(--dim);margin-top:5px;line-height:1.5">
+              Rescans all tickets. Skips manually-managed tickets.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Excluded tickets list -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden">
+        <div style="background:var(--s2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Excluded Tickets</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="excl-search" type="text" placeholder="search ticket / subject / tag…"
+              style="background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:4px 10px;color:var(--txt);font-size:11px;width:190px;outline:none"
+              oninput="exclFilter()"/>
+            <button class="btn btn-outline btn-sm" onclick="exclLoadList()" id="excl-refresh-btn">↺ Refresh</button>
+          </div>
+        </div>
+
+        <!-- Also exclude a ticket manually -->
+        <div style="padding:10px 14px;border-bottom:1px solid var(--bdr);background:var(--bg);display:flex;gap:8px;align-items:center">
+          <input id="excl-manual-tid" type="text" placeholder="Ticket ID to exclude/include manually…"
+            style="flex:1;background:var(--s2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--txt);font-family:var(--mono);font-size:12px;outline:none"
+            onkeydown="if(event.key==='Enter')exclToggleManual(true)"/>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:rgba(248,113,113,.4)" onclick="exclToggleManual(true)">Exclude</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--ok);border-color:rgba(52,211,153,.4)" onclick="exclToggleManual(false)">Include</button>
+        </div>
+
+        <!-- Loading -->
+        <div id="excl-loading" style="display:none;padding:32px;text-align:center">
+          <div class="sp" style="margin:0 auto 10px"></div>
+          <div style="font-size:12px;color:var(--dim)">Loading excluded tickets…</div>
+        </div>
+        <div id="excl-empty" style="padding:32px;text-align:center;color:var(--dim);font-size:13px">No excluded tickets yet.</div>
+
+        <!-- Table -->
+        <div id="excl-table-wrap" style="display:none;overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--s2);border-bottom:1px solid var(--bdr)">
+                <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">ID</th>
+                <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Subject</th>
+                <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Reason</th>
+                <th style="padding:7px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Tags</th>
+                <th style="padding:7px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Action</th>
+              </tr>
+            </thead>
+            <tbody id="excl-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Toast -->
+    <div id="excl-toast" style="display:none;position:fixed;bottom:24px;right:24px;padding:10px 18px;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;font-size:13px;color:var(--txt);z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4)"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // CONFIG
@@ -1595,7 +1721,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','excl'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -1615,7 +1741,7 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 function showTab(id) {
   document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci'].indexOf(id);
+  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','excl'].indexOf(id);
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   document.getElementById('tab-'+id)?.classList.add('active');
   FilterBar.render(id);
@@ -1628,6 +1754,7 @@ function showTab(id) {
   if (id === 'iqa')  iqaInit();
   if (id === 'sc2')  sc2Init();
   if (id === 'ci')   ciInit();
+  if (id === 'excl') exclInit();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -3990,6 +4117,213 @@ function _renderCi(d) {
   }
 
   document.getElementById('ci-result').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+
+
+// ═══════════════════════════════════════════════════════════
+// EXCLUSION MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+
+let _exclList = [];  // full excluded list from server
+
+const EXCL_REASON_LABELS = {
+  'auto_tag:talkdesk':       '🔴 Talkdesk tag',
+  'auto_tag:call_finished':  '📞 Call finished',
+  'auto_tag:spam':           '🚫 Spam tag',
+  'auto_tag:voicemail':      '📼 Voicemail',
+  'auto_tag:noreply':        '⛔ No-reply tag',
+  'auto_tag:no-reply':       '⛔ No-reply tag',
+  'auto_tag:system':         '⚙ System tag',
+  'auto_no_messages':        '💬 No messages',
+  'auto_phone_source':       '📞 Phone source',
+  'auto_subject':            '📝 Auto-subject',
+  'manual':                  '✋ Manual',
+};
+
+function _exclReasonLabel(r) {
+  if (!r) return '—';
+  if (EXCL_REASON_LABELS[r]) return EXCL_REASON_LABELS[r];
+  if (r.startsWith('rule:tag:')) return `🏷 Tag: ${r.slice(9)}`;
+  if (r.startsWith('auto_tag:')) return `🏷 ${r.slice(9)}`;
+  return r;
+}
+
+function _exclToast(msg, ok=true) {
+  const t = document.getElementById('excl-toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  t.style.color = ok ? 'var(--ok)' : 'var(--danger)';
+  setTimeout(()=>{ t.style.display='none'; }, 3000);
+}
+
+async function exclInit() {
+  await Promise.all([exclLoadRules(), exclLoadStats(), exclLoadList()]);
+}
+
+async function exclLoadRules() {
+  try {
+    const rules = await apiFetch('/exclusions/rules');
+    if (!rules) return;
+    document.getElementById('excl-tags').value = (rules.exclude_tags||[]).join('\n');
+    document.getElementById('excl-prefixes').value = (rules.exclude_subject_prefixes||[]).join('\n');
+    document.getElementById('excl-no-msg').checked = !!rules.exclude_no_messages;
+    document.getElementById('excl-phone').checked   = !!rules.exclude_phone_source;
+  } catch(e) { console.error('exclLoadRules', e); }
+}
+
+async function exclSaveRules() {
+  const btn = document.getElementById('excl-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const tags     = document.getElementById('excl-tags').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const prefixes = document.getElementById('excl-prefixes').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const noMsg    = document.getElementById('excl-no-msg').checked;
+    const phone    = document.getElementById('excl-phone').checked;
+    await apiFetch('/exclusions/rules', {
+      method:'POST',
+      body: JSON.stringify({
+        exclude_tags: tags,
+        exclude_subject_prefixes: prefixes,
+        exclude_no_messages: noMsg,
+        exclude_phone_source: phone,
+      })
+    });
+    _exclToast('✓ Rules saved');
+  } catch(e) {
+    _exclToast('Error: '+e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Rules';
+  }
+}
+
+async function exclApplyRules() {
+  const btn = document.getElementById('excl-apply-btn');
+  btn.disabled = true; btn.textContent = '↺ Applying…';
+  try {
+    const res = await apiFetch('/exclusions/apply-rules', {method:'POST'});
+    _exclToast(`✓ Done — ${res.newly_excluded} excluded, ${res.newly_included} included (${res.total_scanned} scanned)`);
+    await Promise.all([exclLoadStats(), exclLoadList()]);
+  } catch(e) {
+    _exclToast('Error: '+e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = '↺ Apply Rules to All Existing Tickets';
+  }
+}
+
+async function exclLoadStats() {
+  try {
+    const s = await apiFetch('/exclusions/stats');
+    if (!s) return;
+    document.getElementById('excl-stats').innerHTML = [
+      {label:'Active tickets', val: s.active, color:'var(--ok)'},
+      {label:'Excluded', val: s.total_excluded, color:'var(--danger)'},
+      {label:'Auto (tag)', val: s.auto_tag, color:'var(--dim)'},
+      {label:'No messages', val: s.auto_no_msg, color:'var(--dim)'},
+      {label:'Manual', val: s.manual, color:'var(--warn)'},
+    ].map(k=>`
+      <div style="text-align:center;padding:6px 12px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;min-width:80px">
+        <div style="font-family:var(--mono);font-size:18px;font-weight:800;color:${k.color}">${k.val}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:1px">${k.label}</div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function exclLoadList() {
+  document.getElementById('excl-loading').style.display = 'block';
+  document.getElementById('excl-empty').style.display   = 'none';
+  document.getElementById('excl-table-wrap').style.display = 'none';
+  document.getElementById('excl-refresh-btn').disabled = true;
+  try {
+    const data = await apiFetch('/exclusions/');
+    _exclList = data || [];
+    _exclRender(_exclList);
+  } catch(e) {
+    _exclToast('Error loading list: '+e.message, false);
+  } finally {
+    document.getElementById('excl-loading').style.display = 'none';
+    document.getElementById('excl-refresh-btn').disabled = false;
+  }
+}
+
+function exclFilter() {
+  const q = (document.getElementById('excl-search')?.value||'').toLowerCase();
+  if (!q) { _exclRender(_exclList); return; }
+  _exclRender(_exclList.filter(t=>
+    (t.ticket_id||'').includes(q) ||
+    (t.subject||'').toLowerCase().includes(q) ||
+    (t.agent_name||'').toLowerCase().includes(q) ||
+    (t.exclude_reason||'').toLowerCase().includes(q) ||
+    (t.tags||[]).some(tag=>tag.toLowerCase().includes(q))
+  ));
+}
+
+function _exclRender(list) {
+  if (!list.length) {
+    document.getElementById('excl-empty').style.display = 'block';
+    document.getElementById('excl-table-wrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('excl-empty').style.display = 'none';
+  document.getElementById('excl-table-wrap').style.display = 'block';
+
+  document.getElementById('excl-tbody').innerHTML = list.map(t => {
+    const reasonLabel = _exclReasonLabel(t.exclude_reason);
+    const isManual = t.exclude_reason === 'manual';
+    const tagsHtml = (t.tags||[]).slice(0,4).map(tag=>
+      `<span style="padding:1px 6px;border-radius:8px;background:var(--s2);font-family:var(--mono);font-size:10px;color:var(--dim)">${tag}</span>`
+    ).join(' ');
+    return `<tr style="border-bottom:1px solid var(--bdr)">
+      <td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">${t.ticket_id}</td>
+      <td style="padding:8px 12px;font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(t.subject||'').replace(/"/g,"'")}">
+        ${t.subject || '<span style="color:var(--dim)">(no subject)</span>'}
+        <div style="font-size:10px;color:var(--dim)">${t.agent_name||''} · ${t.created_at||''}</div>
+      </td>
+      <td style="padding:8px 12px">
+        <span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;background:${isManual?'rgba(251,191,36,.12)':'rgba(248,113,113,.1)'};color:${isManual?'var(--warn)':'var(--danger)'}">
+          ${reasonLabel}
+        </span>
+      </td>
+      <td style="padding:8px 12px">${tagsHtml}</td>
+      <td style="padding:8px 12px;text-align:center">
+        <button class="btn btn-outline btn-sm" style="color:var(--ok);border-color:rgba(52,211,153,.4);font-size:10px"
+          onclick="exclReinclude('${t.ticket_id}')">
+          ↩ Include
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function exclReinclude(ticketId) {
+  try {
+    await apiFetch('/exclusions/toggle', {
+      method:'POST',
+      body: JSON.stringify({ticket_id: ticketId, excluded: false})
+    });
+    _exclToast(`✓ Ticket #${ticketId} re-included in QA`);
+    _exclList = _exclList.filter(t=>t.ticket_id !== ticketId);
+    _exclRender(_exclList);
+    exclLoadStats();
+  } catch(e) {
+    _exclToast('Error: '+e.message, false);
+  }
+}
+
+async function exclToggleManual(doExclude) {
+  const tid = document.getElementById('excl-manual-tid')?.value?.trim();
+  if (!tid) { document.getElementById('excl-manual-tid')?.focus(); return; }
+  try {
+    await apiFetch('/exclusions/toggle', {
+      method:'POST',
+      body: JSON.stringify({ticket_id: tid, excluded: doExclude, reason: 'manual'})
+    });
+    _exclToast(`✓ Ticket #${tid} ${doExclude ? 'excluded' : 'included'}`);
+    document.getElementById('excl-manual-tid').value = '';
+    await Promise.all([exclLoadStats(), exclLoadList()]);
+  } catch(e) {
+    _exclToast('Error: '+e.message, false);
+  }
 }
 
 </script>

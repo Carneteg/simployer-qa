@@ -98,6 +98,10 @@ async def init_db():
         indexes = [
             "CREATE INDEX IF NOT EXISTS ix_evals_user_cx_bad ON evaluations (user_id, cx_bad)",
             "CREATE INDEX IF NOT EXISTS ix_tickets_user_churn_arr ON tickets (user_id, company_id)",
+            # 005_exclusion_fields
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS excluded       BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS exclude_reason VARCHAR",
+            "CREATE INDEX IF NOT EXISTS ix_tickets_excluded ON tickets (user_id, excluded)",
         ]
         for idx in indexes:
             try:

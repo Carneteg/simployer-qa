@@ -79,6 +79,12 @@ class Ticket(Base):
     planhat_phase:       Mapped[Optional[str]]   = mapped_column(String)
     planhat_health:      Mapped[Optional[int]]   = mapped_column(Integer)
     planhat_segmentation: Mapped[Optional[str]]  = mapped_column(String)
+    # ── Exclusion fields ──────────────────────────────────────────────────────
+    # excluded = True means this ticket is skipped in QA scoring and all metrics.
+    # exclude_reason codes: auto_talkdesk | auto_spam | auto_no_reply |
+    #   auto_no_messages | auto_system | manual | rule:<tag>
+    excluded:       Mapped[bool]           = mapped_column(Boolean, default=False)
+    exclude_reason: Mapped[Optional[str]]  = mapped_column(String)
 
     user:        Mapped["User"]             = relationship("User", back_populates="tickets")
     messages:    Mapped[List["Message"]]    = relationship("Message",    primaryjoin="and_(Message.ticket_id==Ticket.id, Message.user_id==Ticket.user_id)", foreign_keys="[Message.ticket_id, Message.user_id]")

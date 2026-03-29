@@ -72,6 +72,58 @@ def _rss_mb() -> float:
         return 0.0
 
 
+
+# ── Exclusion rules ───────────────────────────────────────────────────────────
+# Auto-exclusion is deterministic — no AI call needed. Applied before eval.
+# Rules applied in order; first match wins.
+
+# Tags that always mean "exclude from QA"
+AUTO_EXCLUDE_TAGS = {
+    "call_finished", "talkdesk", "spam", "talkdesk-call",
+    "voicemail", "missed-call", "auto-reply", "noreply",
+    "no-reply", "system", "autoresponder", "out-of-office",
+}
+
+# Subject prefixes that indicate system/automated tickets
+AUTO_EXCLUDE_SUBJECT_PREFIXES = (
+    "auto:", "automatic reply:", "out of office:", "autosvar:",
+    "automatiskt svar:", "abwesenheitsnotiz:", "delivery failure",
+    "undeliverable:", "mailer-daemon", "[spam]",
+)
+
+# Source codes Freshdesk uses for phone/call tickets (source=3 = phone)
+AUTO_EXCLUDE_SOURCES = {3}  # 3 = Phone in Freshdesk
+
+
+def _should_exclude(ticket: dict) -> tuple[bool, str]:
+    """
+    Returns (should_exclude: bool, reason_code: str).
+    reason_code is empty string when not excluded.
+    """
+    tags = {t.lower().strip() for t in (ticket.get("tags") or [])}
+    subject = (ticket.get("subject") or "").lower().strip()
+    source = ticket.get("source")
+
+    # 1. Tag-based exclusion
+    hit = tags & AUTO_EXCLUDE_TAGS
+    if hit:
+        tag = sorted(hit)[0]
+        return True, f"auto_tag:{tag}"
+
+    # 2. Source-based exclusion (phone/Talkdesk calls)
+    if source in AUTO_EXCLUDE_SOURCES:
+        return True, "auto_phone_source"
+
+    # 3. Subject prefix exclusion
+    for prefix in AUTO_EXCLUDE_SUBJECT_PREFIXES:
+        if subject.startswith(prefix):
+            return True, "auto_subject"
+
+    # 4. No description AND no conversations at all (pure system record)
+    # This is checked after build_thread — see _process_ticket usage
+    return False, ""
+
+
 # ── Per-ticket worker ─────────────────────────────────────────────────────────
 
 async def _process_ticket(
@@ -93,8 +145,16 @@ async def _process_ticket(
     async with sem:
         t0 = time.monotonic()
         try:
-            convs    = await fetch_conversations(ticket_id)
-            thread   = build_thread(ticket, convs)
+            # ── Auto-exclusion check (deterministic — no Claude call) ──────────
+            excluded, exclude_reason = _should_exclude(ticket)
+
+            convs  = await fetch_conversations(ticket_id)
+            thread = build_thread(ticket, convs)
+
+            # Also exclude if ticket has no messages at all (pure system record)
+            if not excluded and len(thread) == 0:
+                excluded = True
+                exclude_reason = "auto_no_messages"
             churn_kw        = detect_churn(thread)
             churn_confirmed = is_confirmed_churn(ticket)
 
@@ -128,6 +188,8 @@ async def _process_ticket(
                     tags=ticket.get("tags") or [],
                     fr_escalated=bool(ticket.get("fr_escalated")),
                     nr_escalated=bool(ticket.get("nr_escalated")),
+                    excluded=excluded,
+                    exclude_reason=exclude_reason if excluded else None,
                     created_at=created_at,
                     resolved_at=resolved_at,
                     updated_at=updated_at,
@@ -154,6 +216,8 @@ async def _process_ticket(
                         "planhat_phase":         company_data.get("planhat_phase"),
                         "planhat_health":        company_data.get("planhat_health"),
                         "planhat_segmentation":  company_data.get("planhat_segmentation"),
+                        # Only update exclusion if not manually excluded
+                        # (manual exclusions survive re-runs)
                     }
                 )
                 await db.execute(stmt)
@@ -173,6 +237,13 @@ async def _process_ticket(
                         body=msg["body"],
                     ))
                 await db.commit()
+
+            # Skip AI evaluation for excluded tickets — just save the ticket record
+            if excluded:
+                counters["done"] += 1
+                counters["excluded"] = counters.get("excluded", 0) + 1
+                logger.debug(f"Excluded ticket #{ticket_id}: {exclude_reason}")
+                return
 
             await asyncio.sleep(3)   # pace to ~20 req/min — stays within Haiku TPM
             ev = await eval_ticket(ticket, thread)

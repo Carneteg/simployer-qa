@@ -44,6 +44,9 @@ class TicketOut(BaseModel):
     planhat_phase: Optional[str] = None
     planhat_health: Optional[int] = None
     planhat_segmentation: Optional[str] = None
+    # Exclusion
+    excluded:       bool = False
+    exclude_reason: Optional[str] = None
 
 
 @router.get("/", response_model=List[TicketOut])
@@ -51,6 +54,8 @@ async def list_tickets(
     run_id: Optional[uuid.UUID] = Query(None),
     churn_only: bool = Query(False),
     cx_bad_only: bool = Query(False),
+    exclude_excluded: bool = Query(True),   # default: hide excluded tickets
+    show_excluded_only: bool = Query(False),
     limit: int = Query(100, le=1000),
     offset: int = Query(0),
     user: User = Depends(current_user),
@@ -86,6 +91,8 @@ async def list_tickets(
             Ticket.planhat_phase,
             Ticket.planhat_health,
             Ticket.planhat_segmentation,
+            Ticket.excluded,
+            Ticket.exclude_reason,
         )
         .join(Evaluation, and_(
             Evaluation.ticket_id == Ticket.id,
@@ -100,6 +107,10 @@ async def list_tickets(
         q = q.where(Evaluation.churn_risk_flag == True)
     if cx_bad_only:
         q = q.where(Evaluation.cx_bad == True)
+    if show_excluded_only:
+        q = q.where(Ticket.excluded == True)
+    elif exclude_excluded:
+        q = q.where(Ticket.excluded == False)
 
     q = q.order_by(Evaluation.total_score.asc()).limit(limit).offset(offset)
 
@@ -136,6 +147,8 @@ async def list_tickets(
             planhat_phase=r.get("planhat_phase"),
             planhat_health=r.get("planhat_health"),
             planhat_segmentation=r.get("planhat_segmentation"),
+            excluded=bool(r.get("excluded")) if r.get("excluded") is not None else False,
+            exclude_reason=r.get("exclude_reason"),
         )
         for r in rows
     ]
