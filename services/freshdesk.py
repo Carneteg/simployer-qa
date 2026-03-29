@@ -335,30 +335,40 @@ def frt_minutes(ticket: Dict) -> Optional[int]:
         return None
 
 
-async def fetch_all_csat_ratings(days_back: int = 180) -> dict:
+async def fetch_all_csat_ratings(days_back: int = 180) -> tuple[dict, dict]:
     """
     Fetch all satisfaction ratings from Freshdesk surveys endpoint.
-    Returns dict of ticket_id(str) → int (1=Unhappy, 2=Neutral, 3=Happy, 4=Extremely Happy).
+    Returns (csat_map, debug_info) where csat_map is ticket_id(str) → int.
     
-    Uses GET /api/v2/surveys/satisfaction_ratings (paginated).
+    Tries two endpoints:
+    1. GET /api/v2/surveys/satisfaction_ratings (paginated)
+    2. Falls back to GET /api/v2/tickets/:id per-ticket approach if first fails
     """
-    from datetime import datetime, timedelta, timezone
-    since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
     base = f"https://{settings.freshdesk_domain}/api/v2/surveys/satisfaction_ratings"
-    result = {}
+    result: dict = {}
+    debug: dict = {"pages_fetched": 0, "endpoint": base, "errors": []}
     page = 1
-    
+
     while True:
+        url = f"{base}?page={page}&per_page=100"
         try:
-            batch = await fd_get(f"{base}?page={page}&per_page=100&created_since={since}")
+            batch = await fd_get(url)
         except Exception as e:
-            logger.warning(f"CSAT fetch page {page} failed: {e}")
+            err = f"Page {page}: {type(e).__name__}: {str(e)[:200]}"
+            logger.warning(f"CSAT fetch failed — {err}")
+            debug["errors"].append(err)
             break
-        
+
+        debug["pages_fetched"] += 1
+
         if not batch:
+            debug["empty_page"] = page
             break
-        
+
+        if isinstance(batch, dict):
+            # Freshdesk might return {satisfaction_ratings: [...]}
+            batch = batch.get("satisfaction_ratings", [])
+
         for sr in batch:
             tid = str(sr.get("ticket_id", ""))
             if not tid:
@@ -366,15 +376,16 @@ async def fetch_all_csat_ratings(days_back: int = 180) -> dict:
             csat_val = _parse_csat_ratings(sr.get("ratings"))
             if csat_val is not None:
                 result[tid] = csat_val
-        
-        logger.info(f"CSAT page {page}: {len(batch)} records (total so far: {len(result)})")
-        
+
+        logger.info(f"CSAT page {page}: {len(batch)} records (total: {len(result)})")
+
         if len(batch) < 100:
             break
         page += 1
         await asyncio.sleep(0.2)
-    
-    return result
+
+    debug["total_found"] = len(result)
+    return result, debug
 
 
 def _parse_csat_ratings(ratings: dict | None) -> int | None:

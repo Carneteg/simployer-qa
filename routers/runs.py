@@ -178,12 +178,17 @@ async def backfill_csat(
 
     # Fetch CSAT ratings from Freshdesk surveys endpoint
     try:
-        csat_map = await fetch_all_csat_ratings(days_back=req.days_back)
+        csat_map, csat_debug = await fetch_all_csat_ratings(days_back=req.days_back)
     except Exception as e:
         raise HTTPException(500, f"Freshdesk CSAT fetch failed: {e}")
 
     if not csat_map:
-        return {"updated": 0, "message": "No CSAT data found in Freshdesk. Check that satisfaction surveys are enabled and responses exist for this period."}
+        return {
+            "updated": 0,
+            "csat_found_in_freshdesk": 0,
+            "debug": csat_debug,
+            "message": "No CSAT data found in Freshdesk surveys endpoint.",
+        }
 
     # Bulk-update DB — only tickets owned by this user that have a csat value
     result = await db.execute(
@@ -217,5 +222,6 @@ async def backfill_csat(
         "updated": updated,
         "csat_found_in_freshdesk": len(csat_map),
         "tickets_in_db": len(tickets),
+        "debug": csat_debug,
         "message": f"Backfilled CSAT for {updated} tickets from {len(csat_map)} Freshdesk responses.",
     }
