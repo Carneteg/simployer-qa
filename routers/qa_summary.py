@@ -35,7 +35,7 @@ router = APIRouter()
 logger = logging.getLogger("simployer.qa_summary")
 TTL = 600  # 10 min — heavy Sonnet call, cache aggressively
 
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=45.0)
+_client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=55.0)
 
 SYSTEM = (
     "You are generating a leadership QA summary for a B2B SaaS support team. "
@@ -336,7 +336,7 @@ async def generate_qa_summary(
                 system=SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             ),
-            timeout=45.0,
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "QA Summary generation timed out. Retry.")

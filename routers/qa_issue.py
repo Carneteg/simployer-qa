@@ -16,9 +16,12 @@ from anthropic import AsyncAnthropic
 
 from config import settings
 from models import User
+import hashlib
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set
 
 router  = APIRouter()
+TTL_IQA = 600   # 10 min — same issue text always produces same analysis
 logger  = logging.getLogger("simployer.qa_issue")
 _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=55.0)
 
@@ -121,6 +124,13 @@ async def analyze_issue(
     if not body.issue or len(body.issue.strip()) < 5:
         raise HTTPException(422, "Issue description is required (min 5 characters).")
 
+    # Cache — same issue text produces same output every time
+    _iqa_hash = hashlib.md5(f"{body.issue}{body.system_context}".encode()).hexdigest()[:12]
+    _iqa_key  = f"iqa:{user.id}:{_iqa_hash}"
+    _iqa_cached = await cache_get(_iqa_key)
+    if _iqa_cached is not None:
+        return _iqa_cached
+
     prompt = PROMPT.format(
         issue          = body.issue.strip()[:2000],
         system_context = body.system_context.strip()[:500] if body.system_context else "Not provided",
@@ -149,4 +159,5 @@ async def analyze_issue(
         v["business_risk"] = "Medium"
 
     data["meta"] = {"issue_preview": body.issue[:120]}
+    await cache_set(_iqa_key, data, TTL_IQA)
     return data

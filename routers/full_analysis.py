@@ -31,8 +31,10 @@ from config import settings
 from database import get_db
 from models import User, Ticket, Evaluation, Message
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set
 
 router  = APIRouter()
+TTL_FQA = 300   # 5 min — full analysis is expensive, cache aggressively
 logger  = logging.getLogger("simployer.full_analysis")
 _client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60.0)
 
@@ -223,6 +225,12 @@ async def generate_full_analysis(
     db:   AsyncSession = Depends(get_db),
 ):
     t0 = time.time()
+
+    # ── Cache check ──────────────────────────────────────────────────────────
+    _fqa_key = f"fqa:{user.id}:{body.ticket_id}:{body.run_id or 'all'}"
+    _fqa_cached = await cache_get(_fqa_key)
+    if _fqa_cached is not None:
+        return _fqa_cached
 
     # ── 1. Load ticket + messages + eval in parallel ─────────────────────────
     tkt_res, msg_res, eval_res = await asyncio.gather(
@@ -436,4 +444,5 @@ async def generate_full_analysis(
     }
 
     logger.info(f"full_analysis Sonnet: {data['meta']['gen_ms']}ms")
+    await cache_set(_fqa_key, data, TTL_FQA)
     return data

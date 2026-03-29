@@ -16,12 +16,15 @@ from config import settings
 from database import get_db
 from models import User, Ticket, Message, Evaluation
 from routers.auth import current_user
+from services.cache import get as cache_get, set as cache_set
 
 router = APIRouter()
-# 30s hard timeout — surface as HTTP 504 rather than hanging indefinitely
+TTL_SC = 300   # 5 min cache — manual scorecard result is stable
+
+# 55s hard timeout — Sonnet needs breathing room on complex tickets
 _client = AsyncAnthropic(
     api_key=settings.anthropic_api_key,
-    timeout=30.0,
+    timeout=55.0,
 )
 
 SYSTEM = (
@@ -117,6 +120,12 @@ async def generate_scorecard(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Cache check
+    _cache_key = f"sc:{user.id}:{body.ticket_id}"
+    _cached = await cache_get(_cache_key)
+    if _cached is not None:
+        return _cached
+
     # Load ticket
     ticket_result = await db.execute(
         select(Ticket).where(
@@ -164,12 +173,12 @@ async def generate_scorecard(
                 system=SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             ),
-            timeout=30.0,
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=504,
-            detail="Scorecard generation timed out (>30s). Try a shorter ticket or retry."
+            detail="Scorecard generation timed out. Retry."
         )
     raw = response.content[0].text
     data = json.loads(_repair(raw))
@@ -196,4 +205,5 @@ async def generate_scorecard(
         "msg_count": len(messages),
     }
 
+    await cache_set(_cache_key, data, TTL_SC)
     return data

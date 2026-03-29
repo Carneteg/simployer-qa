@@ -33,7 +33,7 @@ from services.cache import get as cache_get, set as cache_set
 router  = APIRouter()
 logger  = logging.getLogger("simployer.improvements")
 TTL     = 600   # 10 min cache
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=45.0)
+_client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=55.0)
 
 SYSTEM = (
     "You are a Head of Customer Care reviewing support ticket quality data. "
@@ -311,7 +311,7 @@ async def generate_improvements(
                 system=SYSTEM,
                 messages=[{"role":"user","content":prompt}],
             ),
-            timeout=45.0,
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "Improvements generation timed out. Retry.")

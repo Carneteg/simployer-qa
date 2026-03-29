@@ -663,7 +663,7 @@ async def generate_qa_scorecard_v2(
                 system      = SYSTEM_PROMPT,
                 messages    = [{"role": "user", "content": prompt}],
             ),
-            timeout=50.0,
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "Scoring timed out. Retry.")
