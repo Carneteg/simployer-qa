@@ -311,6 +311,7 @@ details[open] summary::after { content: ' ▴'; }
       <div class="nav-item" id="nav-iqa"    onclick="showTab('iqa')">  <span class="nav-icon">⊗</span>Issue Analysis</div>
       <div class="nav-item" id="nav-sc2"    onclick="showTab('sc2')">  <span class="nav-icon">⚖</span>QA Scorecard</div>
       <div class="nav-item" id="nav-ci"     onclick="showTab('ci')">   <span class="nav-icon">◌</span>Customer Intel</div>
+      <div class="nav-item" id="nav-qaf"    onclick="showTab('qaf')">   <span class="nav-icon">★</span>QA Framework</div>
     </div>
     <div class="nav-section">
       <div class="nav-section-label">Intelligence</div>
@@ -1549,6 +1550,72 @@ details[open] summary::after { content: ' ▴'; }
   </div>
 </div>
 
+<!-- QA FRAMEWORK -->
+<div class="tab-content" id="tab-qaf">
+  <div style="max-width:980px;margin:0 auto">
+    <!-- Framework banner -->
+    <div style="background:var(--txt);border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:15px;font-weight:700;color:#fff;margin-bottom:3px">QA Framework v1.0 — Per-Answer Evaluation</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.55);line-height:1.7">Each agent message scored independently &middot; 7 dimensions &middot; Negative scores allowed &middot; No outcome bias</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(151,115,255,.25);color:var(--purple-lt)">D1 Communication</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(14,181,119,.2);color:#4ade80">D2 Churn Signal</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(232,160,32,.2);color:#fbbf24">D3 Churn Risk</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(91,106,240,.25);color:#a5b4fc">D4 Holdback</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(91,106,240,.2);color:#c4b5fd">D5 Termination</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(14,181,119,.15);color:#6ee7b7">D6 Winback</span>
+        <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(151,115,255,.18);color:#fff">D7 Excellence</span>
+      </div>
+    </div>
+    <!-- Input -->
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <label style="font-size:11px;color:var(--dim);font-weight:700;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Ticket ID</label>
+        <input id="qaf-tid" type="text" placeholder="e.g. 63511"
+          style="width:100%;background:var(--bg);border:1.5px solid var(--bdr);border-radius:var(--r-md);padding:9px 13px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')runQaf()"/>
+      </div>
+      <button class="btn btn-primary" onclick="runQaf()" id="qaf-btn" style="height:39px;padding:0 22px">&#9733; Run Framework</button>
+    </div>
+    <!-- States -->
+    <div id="qaf-loading" style="display:none;padding:56px;text-align:center">
+      <div class="sp" style="margin:0 auto 14px;width:28px;height:28px;border-width:3px"></div>
+      <div style="font-size:13px;color:var(--dim)">Evaluating each agent response individually&hellip;</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">7 dimensions &middot; per-message scoring &middot; ~20&ndash;40s depending on thread length</div>
+    </div>
+    <div id="qaf-error" style="display:none;padding:12px 14px;background:var(--danger-lt);border:1px solid rgba(229,55,74,.3);border-radius:var(--r-md);font-size:13px;color:var(--danger);margin-bottom:12px"></div>
+    <div id="qaf-empty" style="padding:60px;text-align:center;color:var(--dim)">
+      <div style="font-size:38px;margin-bottom:12px">&#9733;</div>
+      <div style="font-size:15px;font-weight:600;color:var(--txt);margin-bottom:6px">QA Framework v1.0</div>
+      <div style="font-size:13px;line-height:1.8;max-width:520px;margin:0 auto">Enter a ticket ID to score every agent message individually.<br>
+        Each response is evaluated across all 7 dimensions &mdash; including negative scoring for harmful responses. No outcome bias.</div>
+    </div>
+    <!-- Result -->
+    <div id="qaf-result" style="display:none">
+      <div id="qaf-hero" style="border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:14px"></div>
+      <!-- Dimension reference -->
+      <div style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--bg-subtle);padding:9px 14px;border-bottom:1px solid var(--bdr)">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Dimension Reference</span>
+        </div>
+        <div id="qaf-dim-ref" style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--bdr)"></div>
+      </div>
+      <!-- Per-message cards -->
+      <div id="qaf-messages" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px"></div>
+      <!-- Coaching -->
+      <div id="qaf-coaching-wrap" style="border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--bg-subtle);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Coaching Notes — All Responses</span>
+          <span id="qaf-negative-badge" style="display:none;padding:2px 10px;border-radius:var(--r-pill);font-size:11px;font-weight:700;background:rgba(229,55,74,.12);color:var(--danger)">&#9888; Net Harmful Response Detected</span>
+        </div>
+        <div id="qaf-coaching-list" style="padding:14px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // CONFIG
@@ -1906,7 +1973,7 @@ async function loadEvals() {
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
   const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','excl'];
+  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','qaf','excl'];
   const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
   const currentTab = tabs[tabIdx] ?? 'ov';
   // Only re-render filterable tabs on filter change
@@ -1942,6 +2009,7 @@ const PAGE_META = {
   'sc2':   {title:'QA Scorecard',    sub:'Priority-aware SLA scoring with confidence model'},
   'ci':    {title:'Customer Intel',  sub:'Lifecycle, root cause, churn risk and recommendations'},
   'excl':  {title:'Exclusions',      sub:'Manage tickets excluded from QA measurement'},
+  'qaf':   {title:'QA Framework',      sub:'Per-answer scoring across 7 dimensions — Communication · Churn · Holdback · Termination · Winback · Excellence'},
 };
 
 function showTab(id) {
@@ -1977,6 +2045,7 @@ function showTab(id) {
   if (id === 'sc2')  sc2Init();
   if (id === 'ci')   ciInit();
   if (id === 'excl') exclInit();
+  if (id === 'qaf')  qafInit();
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -4546,6 +4615,237 @@ async function exclToggleManual(doExclude) {
   } catch(e) {
     _exclToast('Error: '+e.message, false);
   }
+}
+
+
+
+
+
+
+// ═══════════════════════════════════════════════════════════
+// QA FRAMEWORK v1.0 — Per-Answer 7-Dimension Scoring
+// ═══════════════════════════════════════════════════════════
+
+const QAF_DIMS = [
+  { key:'d1_communication', label:'D1 Communication',    range:'1–5',     color:'#9773ff', bg:'rgba(151,115,255,.1)' },
+  { key:'d2_churn_signal',  label:'D2 Churn Signal',     range:'−1–5',    color:'#0ab577', bg:'rgba(10,181,119,.08)' },
+  { key:'d3_churn_risk',    label:'D3 Churn Risk',       range:'−2–5',    color:'#e8a020', bg:'rgba(232,160,32,.08)' },
+  { key:'d4_holdback',      label:'D4 Holdback',         range:'−2–5/N/A',color:'#5b6af0', bg:'rgba(91,106,240,.08)' },
+  { key:'d5_termination',   label:'D5 Termination',      range:'−1–5/N/A',color:'#7c5ce8', bg:'rgba(124,92,232,.08)' },
+  { key:'d6_winback',       label:'D6 Winback',          range:'0–5',     color:'#00bfa5', bg:'rgba(0,191,165,.08)' },
+  { key:'d7_excellence',    label:'D7 Service Excellence',range:'1–5',    color:'#9773ff', bg:'rgba(151,115,255,.15)' },
+];
+
+const QAF_BAND_STYLE = {
+  'Exceptional': { color:'var(--ok)',     bg:'rgba(10,181,119,.12)' },
+  'Strong':      { color:'#2196F3',       bg:'rgba(33,150,243,.1)'  },
+  'Acceptable':  { color:'var(--warn)',   bg:'rgba(232,160,32,.1)'  },
+  'Needs Work':  { color:'var(--danger)', bg:'rgba(229,55,74,.1)'   },
+  'Poor':        { color:'#b71c1c',       bg:'rgba(183,28,28,.1)'   },
+  'Net Harmful': { color:'#4A0000',       bg:'rgba(74,0,0,.15)'     },
+};
+
+function qafInit() {
+  // Pre-fill from ticket selection if available
+}
+
+function launchQaf(ticketId) {
+  showTab('qaf');
+  const inp = document.getElementById('qaf-tid');
+  if (inp) { inp.value = ticketId; setTimeout(runQaf, 150); }
+}
+
+async function runQaf() {
+  const tid = document.getElementById('qaf-tid')?.value?.trim();
+  if (!tid) { document.getElementById('qaf-tid')?.focus(); return; }
+
+  document.getElementById('qaf-empty').style.display   = 'none';
+  document.getElementById('qaf-result').style.display  = 'none';
+  document.getElementById('qaf-error').style.display   = 'none';
+  document.getElementById('qaf-loading').style.display = 'block';
+  document.getElementById('qaf-btn').disabled = true;
+  document.getElementById('qaf-btn').innerHTML = '<div class="sp"></div> Scoring\u2026';
+
+  try {
+    const d = await apiFetch('/qa-framework/', { method:'POST', body:JSON.stringify({ticket_id: tid}) });
+    if (!d) throw new Error('Empty response');
+    if (d.detail) throw new Error(d.detail);
+    _renderQaf(d);
+  } catch(err) {
+    document.getElementById('qaf-loading').style.display = 'none';
+    document.getElementById('qaf-error').style.display   = 'block';
+    document.getElementById('qaf-error').textContent     = 'Error: ' + err.message;
+    document.getElementById('qaf-empty').style.display   = 'block';
+  } finally {
+    document.getElementById('qaf-btn').disabled  = false;
+    document.getElementById('qaf-btn').innerHTML = '&#9733; Run Framework';
+  }
+}
+
+function _qafScoreColor(s) {
+  if (s === null || s === undefined) return 'var(--dim)';
+  if (s >= 4)  return 'var(--ok)';
+  if (s >= 2)  return 'var(--warn)';
+  if (s >= 0)  return 'var(--danger)';
+  return '#b71c1c';
+}
+function _qafScoreBg(s) {
+  if (s === null || s === undefined) return 'var(--bg-subtle)';
+  if (s >= 4)  return 'rgba(10,181,119,.1)';
+  if (s >= 2)  return 'rgba(232,160,32,.1)';
+  if (s >= 0)  return 'rgba(229,55,74,.08)';
+  return 'rgba(183,28,28,.12)';
+}
+
+function _renderQaf(d) {
+  document.getElementById('qaf-loading').style.display = 'none';
+  document.getElementById('qaf-empty').style.display   = 'none';
+  document.getElementById('qaf-error').style.display   = 'none';
+  document.getElementById('qaf-result').style.display  = 'block';
+
+  const tkt  = d.ticket      || {};
+  const agg  = d.aggregate   || {};
+  const msgs = d.message_scores || [];
+  const band = agg.band || {};
+  const bandStyle = QAF_BAND_STYLE[band.band] || QAF_BAND_STYLE['Acceptable'];
+  const priLabel = {4:'Urgent',3:'High',2:'Medium',1:'Low'}[tkt.priority]||'';
+
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  document.getElementById('qaf-hero').innerHTML = `
+    <div style="background:var(--txt);padding:16px 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:var(--disp);font-size:16px;font-weight:700;color:#fff;margin-bottom:3px">Ticket #${tkt.id} &mdash; ${tkt.agent||'&mdash;'}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.5)">${tkt.subject||''}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+          ${priLabel?`<span style="padding:2px 10px;border-radius:var(--r-pill);font-size:11px;font-weight:700;background:rgba(232,160,32,.2);color:#fbbf24">${priLabel}</span>`:''}
+          <span style="font-size:11px;color:rgba(255,255,255,.5)">${tkt.total_messages} messages &middot; ${tkt.agent_messages} agent responses scored</span>
+          ${tkt.arr?`<span style="font-size:11px;color:#fbbf24">NOK ${(tkt.arr/1000000).toFixed(2)}M ARR</span>`:''}
+          ${agg.net_harmful_response?`<span style="padding:2px 10px;border-radius:var(--r-pill);font-size:11px;font-weight:700;background:rgba(183,28,28,.3);color:#f87171">&#9888; NET HARMFUL DETECTED</span>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center">
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:30px;font-weight:900;color:${bandStyle.color};line-height:1">${agg.total_score??'&mdash;'}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">Total Score</div>
+          <div style="font-size:9px;color:rgba(255,255,255,.3)">${agg.applicable_max?'/ '+agg.applicable_max:''}</div>
+        </div>
+        <div style="width:1px;height:50px;background:rgba(255,255,255,.1)"></div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${bandStyle.color};line-height:1">${agg.avg_per_message??'&mdash;'}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">Avg / Message</div>
+        </div>
+        <div style="padding:8px 14px;border-radius:var(--r-md);background:${bandStyle.bg};border:1px solid ${bandStyle.color}33;text-align:center">
+          <div style="font-size:12px;font-weight:700;color:${bandStyle.color}">${band.band||''}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px;max-width:140px;line-height:1.4">${band.description||''}</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--bdr)">
+      ${QAF_DIMS.map(dim => {
+        const allScores = msgs.map(m => m.dimensions?.[dim.key]?.score).filter(s => s !== null && s !== undefined);
+        const avg = allScores.length ? (allScores.reduce((a,b)=>a+b,0)/allScores.length).toFixed(1) : 'N/A';
+        return `<div style="background:var(--bg);padding:10px 8px;text-align:center">
+          <div style="font-size:10px;font-weight:700;color:${dim.color};margin-bottom:3px">${dim.label.replace('D'+dim.label[1]+' ','')}</div>
+          <div style="font-family:var(--mono);font-size:16px;font-weight:800;color:${_qafScoreColor(parseFloat(avg))}">${avg}</div>
+          <div style="font-size:9px;color:var(--dim)">avg</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // ── Dimension reference bar ────────────────────────────────────────────────
+  document.getElementById('qaf-dim-ref').innerHTML = QAF_DIMS.map(dim => `
+    <div style="background:${dim.bg};padding:10px 10px;text-align:center">
+      <div style="font-size:11px;font-weight:700;color:${dim.color}">${dim.label}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px">${dim.range}</div>
+    </div>`).join('');
+
+  // ── Per-message cards ──────────────────────────────────────────────────────
+  document.getElementById('qaf-messages').innerHTML = msgs.map((msg, mi) => {
+    if (msg.error) return `
+      <div style="border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;background:var(--bg-subtle)">
+        <div style="font-size:12px;color:var(--danger)">&#9888; Response #${msg.message_index}: ${msg.error}</div>
+      </div>`;
+
+    const dims = msg.dimensions || {};
+    const bandStyle2 = QAF_BAND_STYLE[msg.band?.band] || QAF_BAND_STYLE['Acceptable'];
+    const isNegative = msg.negative_flag;
+
+    const dimCells = QAF_DIMS.map(dim => {
+      const entry = dims[dim.key] || {};
+      const s = entry.score;
+      const isNA = s === null || s === undefined;
+      return `<div style="background:${isNA ? 'var(--bg-subtle)' : _qafScoreBg(s)};padding:10px 8px;text-align:center">
+        <div style="font-family:var(--mono);font-size:16px;font-weight:800;color:${isNA ? 'var(--dim)' : _qafScoreColor(s)}">${isNA ? 'N/A' : s}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px" title="${(entry.evidence||'').replace(/"/g,"'")}">${entry.evidence ? '"'+entry.evidence.slice(0,25)+'\u2026"' : dim.label.split(' ').slice(1).join(' ')}</div>
+      </div>`;
+    }).join('');
+
+    const rationaleRows = QAF_DIMS.map(dim => {
+      const entry = dims[dim.key] || {};
+      const s = entry.score;
+      const isNA = s === null || s === undefined;
+      if (!entry.rationale) return '';
+      return `<tr style="border-bottom:1px solid var(--bdr)">
+        <td style="padding:7px 12px;font-weight:700;font-size:11px;color:${dim.color};white-space:nowrap">${dim.label}</td>
+        <td style="padding:7px 12px;font-family:var(--mono);font-size:13px;font-weight:800;text-align:center;color:${isNA ? 'var(--dim)' : _qafScoreColor(s)}">${isNA ? 'N/A' : s}</td>
+        <td style="padding:7px 12px;font-size:12px;color:var(--dim)">${entry.rationale||''}</td>
+      </tr>`;
+    }).filter(Boolean).join('');
+
+    return `
+    <div style="border:${isNegative?'2px solid var(--danger)':'1px solid var(--bdr)'};border-radius:10px;overflow:hidden;background:var(--bg)">
+      <!-- Message header -->
+      <div style="padding:10px 14px;background:${isNegative?'rgba(229,55,74,.06)':'var(--bg-subtle)'};display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--bdr)">
+        <div>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim)">Response #${msg.message_index}</span>
+          ${isNegative?'<span style="margin-left:8px;padding:1px 8px;border-radius:var(--r-pill);font-size:10px;font-weight:700;background:rgba(229,55,74,.12);color:var(--danger)">&#9888; NEGATIVE</span>':''}
+          <div style="font-size:12px;color:var(--dim);margin-top:3px;font-style:italic">"${msg.message_preview||''}&hellip;"</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="text-align:center">
+            <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:${bandStyle2.color}">${msg.total_score??'&mdash;'}</div>
+            <div style="font-size:10px;color:var(--dim)">${msg.applicable_max?'/ '+msg.applicable_max:''}</div>
+          </div>
+          <span style="padding:3px 10px;border-radius:var(--r-pill);font-size:11px;font-weight:700;background:${bandStyle2.bg};color:${bandStyle2.color}">${msg.band?.band||''}</span>
+        </div>
+      </div>
+      <!-- Dimension scores grid -->
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--bdr)">
+        ${dimCells}
+      </div>
+      <!-- Rationale table (collapsible) -->
+      <details style="border-top:1px solid var(--bdr)">
+        <summary style="padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--bg-subtle);list-style:none;display:flex;align-items:center;justify-content:space-between;user-select:none">
+          <span>Rationale &amp; Evidence</span>
+          <span style="font-size:10px;color:var(--dim)">click to expand</span>
+        </summary>
+        <div style="padding:0">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--bg-subtle);border-bottom:1px solid var(--bdr)">
+              <th style="padding:6px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;width:160px">Dimension</th>
+              <th style="padding:6px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;width:60px">Score</th>
+              <th style="padding:6px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase">Rationale</th>
+            </tr></thead>
+            <tbody>${rationaleRows}</tbody>
+          </table>
+        </div>
+      </details>
+    </div>`;
+  }).join('');
+
+  // ── Coaching notes ─────────────────────────────────────────────────────────
+  const negBadge = document.getElementById('qaf-negative-badge');
+  negBadge.style.display = agg.net_harmful_response ? 'inline-block' : 'none';
+
+  document.getElementById('qaf-coaching-list').innerHTML = msgs
+    .filter(m => m.coaching_note)
+    .map((m, i) => `
+      <div style="padding:10px 14px;background:${m.negative_flag?'rgba(229,55,74,.05)':'var(--bg-subtle)'};border:1px solid ${m.negative_flag?'rgba(229,55,74,.25)':'var(--bdr)'};border-left:3px solid ${m.negative_flag?'var(--danger)':'var(--purple)'};border-radius:var(--r-md);display:flex;align-items:flex-start;gap:10px">
+        <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:${m.negative_flag?'var(--danger)':'var(--purple)'};white-space:nowrap;margin-top:1px">Response #${m.message_index}</div>
+        <div style="font-size:13px;line-height:1.6">${m.coaching_note||''}</div>
+      </div>`).join('');
+
+  document.getElementById('qaf-result').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 </script>
