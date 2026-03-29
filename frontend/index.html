@@ -2031,10 +2031,7 @@ async function loadEvals() {
 
 // Subscribe to state changes → re-render current tab
 State.subscribe(() => {
-  const activeTab = document.querySelector('.tab.active');
-  const tabs = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','qaf','excl'];
-  const tabIdx = [...document.querySelectorAll('.tab')].indexOf(activeTab);
-  const currentTab = tabs[tabIdx] ?? 'ov';
+const currentTab = FilterBar.activeTab || 'ov';
   // Only re-render filterable tabs on filter change
   if (['tix','ag','ch'].includes(currentTab)) {
     if (currentTab === 'tix') renderTix();
