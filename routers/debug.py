@@ -269,3 +269,32 @@ async def n1_audit():
         },
         "summary": "No N+1 patterns found. All list endpoints use single aggregate queries.",
     }
+
+
+@router.get("/csat-probe")
+async def csat_probe(
+    pages: int = 3,
+    user: User = Depends(current_user),
+):
+    """
+    Raw probe of the Freshdesk satisfaction_ratings endpoint.
+    Returns the first few records so we can see the actual data shape.
+    """
+    from services.freshdesk import fd_get
+    from config import settings
+
+    results = {}
+    for page in range(1, pages + 1):
+        url = f"https://{settings.freshdesk_domain}/api/v2/surveys/satisfaction_ratings?page={page}&per_page=10"
+        try:
+            data = await fd_get(url)
+            results[f"page_{page}"] = {
+                "type": type(data).__name__,
+                "length": len(data) if isinstance(data, list) else None,
+                "keys": list(data.keys()) if isinstance(data, dict) else None,
+                "sample": data[:2] if isinstance(data, list) else data,
+            }
+        except Exception as e:
+            results[f"page_{page}"] = {"error": str(e)}
+
+    return results
