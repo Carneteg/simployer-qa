@@ -483,15 +483,16 @@ details[open] summary::after { content: ' ▴'; }
      LOGIN PAGE — Simployer brand
      ═══════════════════════════════════════════════════ -->
 <div class="login-wrap" id="login-screen">
-  <div class="login-left">
-    <div class="login-brand">
-      <div class="login-brand-icon">✦</div>
-      <span class="login-brand-name">Simployer</span>
-      <span class="login-brand-badge">QA</span>
-    </div>
-    <div class="login-hero">
-      <h1>Quality Intelligence<br>for Customer Support</h1>
-      <p>Automated QA scoring, SLA analysis, churn risk detection, and lifecycle intelligence — powered by AI and built for Nordic support teams.</p>
+  <div class="login-card">
+    <div class="login-logo">Simployer <span>QA</span></div>
+    <div class="login-sub">Sign in to your organisation</div>
+    <div class="lf"><label>Email</label><input id="l-email" type="email" placeholder="you@simployer.com" autocomplete="email"/></div>
+    <div class="lf"><label>Password</label><input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+    <div class="login-err" id="login-err"></div>
+    <button class="btn btn-primary btn-full" onclick="doLogin()" id="login-btn">Sign In</button>
+  </div>
+</div>
+
 <div class="app-wrap" id="app-screen">
 
 <!-- SIDEBAR -->
@@ -560,54 +561,6 @@ details[open] summary::after { content: ' ▴'; }
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
 <div class="filter-bar" id="filter-bar" style="display:none"></div>
-
-
-      </div>
-      <span class="app-header-badge">QA Intelligence</span>
-    </div>
-    <div class="app-header-right">
-      <div class="user-pill" id="user-pill">—</div>
-      <button class="btn btn-outline btn-sm" onclick="doExport('xlsx')">⬇ Export</button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()" style="color:var(--danger);border-color:rgba(220,38,38,.25)">Sign Out</button>
-    </div>
-  </header>
-  <div class="app-body">
-    <nav class="sidebar" id="app-sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">Quality</div>
-        <div class="sidebar-item active" id="nav-ov"   onclick="showTab('ov')"><span class="sidebar-icon">◈</span>Overview</div>
-        <div class="sidebar-item" id="nav-tix"  onclick="showTab('tix')"><span class="sidebar-icon">◉</span>Tickets</div>
-        <div class="sidebar-item" id="nav-ag"   onclick="showTab('ag')"><span class="sidebar-icon">◎</span>Agents</div>
-        <div class="sidebar-item" id="nav-ch"   onclick="showTab('ch')"><span class="sidebar-icon">⚠</span>Churn Risk</div>
-      </div>
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">Analysis</div>
-        <div class="sidebar-item" id="nav-qas"  onclick="showTab('qas')"><span class="sidebar-icon">∑</span>QA Summary</div>
-        <div class="sidebar-item" id="nav-imp"  onclick="showTab('imp')"><span class="sidebar-icon">↑</span>Improvements</div>
-        <div class="sidebar-item" id="nav-cat"  onclick="showTab('cat')"><span class="sidebar-icon">⊞</span>Categories</div>
-        <div class="sidebar-item" id="nav-fqa"  onclick="showTab('fqa')"><span class="sidebar-icon">✦</span>Full Analysis</div>
-      </div>
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">AI Tools</div>
-        <div class="sidebar-item" id="nav-score" onclick="showTab('score')"><span class="sidebar-icon">☑</span>Manual Review</div>
-        <div class="sidebar-item" id="nav-agrev" onclick="showTab('agrev')"><span class="sidebar-icon">◑</span>Agent Review</div>
-        <div class="sidebar-item" id="nav-sc2"  onclick="showTab('sc2')"><span class="sidebar-icon">⚖</span>QA Scorecard</div>
-        <div class="sidebar-item" id="nav-iqa"  onclick="showTab('iqa')"><span class="sidebar-icon">⚡</span>Issue Analysis</div>
-        <div class="sidebar-item" id="nav-ci"   onclick="showTab('ci')"><span class="sidebar-icon">🔭</span>Customer Intel</div>
-      </div>
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">Operations</div>
-        <div class="sidebar-item" id="nav-runs" onclick="showTab('runs')"><span class="sidebar-icon">▶</span>Runs</div>
-        <div class="sidebar-item" id="nav-exp"  onclick="showTab('exp')"><span class="sidebar-icon">⬇</span>Export</div>
-        <div class="sidebar-item" id="nav-excl" onclick="showTab('excl')"><span class="sidebar-icon">⊘</span>Exclusions</div>
-      </div>
-    </nav>
-    <main class="main-content" id="main-content">
-      <div class="filter-bar" id="filter-bar" style="display:none"></div>
-      <div class="main-inner">
 
 <!-- OVERVIEW -->
 <div class="tab-content active" id="tab-ov">
