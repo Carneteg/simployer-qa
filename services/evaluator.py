@@ -33,6 +33,7 @@ from models import Run, Ticket, Message, Evaluation
 from services.freshdesk import (
     fetch_all_tickets, fetch_conversations,
     build_thread, detect_churn, is_confirmed_churn, fetch_company,
+    fetch_ticket_csat,
 )
 from services.claude import eval_ticket
 
@@ -211,7 +212,7 @@ async def _process_ticket(
                     ),
                     status=ticket.get("status"),
                     priority=ticket.get("priority"),
-                    csat=_parse_csat(ticket.get("satisfaction_rating")),
+                    csat=(await fetch_ticket_csat(ticket_id)),
                     tags=ticket.get("tags") or [],
                     fr_escalated=bool(ticket.get("fr_escalated")),
                     nr_escalated=bool(ticket.get("nr_escalated")),

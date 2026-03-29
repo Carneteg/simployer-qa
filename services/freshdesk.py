@@ -204,7 +204,7 @@ async def fetch_all_tickets(days_back: int, since: Optional[str] = None) -> List
     while True:
         url = (
             f"{base}?updated_since={since}&per_page=100&page={page}"
-            f"&include=stats,requester,satisfaction_ratings"
+            f"&include=stats,requester"
             f"&order_by=updated_at&order_type=desc"
         )
         batch = await fd_get(url)
@@ -333,3 +333,79 @@ def frt_minutes(ticket: Dict) -> Optional[int]:
         return int((t1 - t0).total_seconds() / 60)
     except Exception:
         return None
+
+
+async def fetch_all_csat_ratings(days_back: int = 180) -> dict:
+    """
+    Fetch all satisfaction ratings from Freshdesk surveys endpoint.
+    Returns dict of ticket_id(str) → int (1=Unhappy, 2=Neutral, 3=Happy, 4=Extremely Happy).
+    
+    Uses GET /api/v2/surveys/satisfaction_ratings (paginated).
+    """
+    from datetime import datetime, timedelta, timezone
+    since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    base = f"https://{settings.freshdesk_domain}/api/v2/surveys/satisfaction_ratings"
+    result = {}
+    page = 1
+    
+    while True:
+        try:
+            batch = await fd_get(f"{base}?page={page}&per_page=100&created_since={since}")
+        except Exception as e:
+            logger.warning(f"CSAT fetch page {page} failed: {e}")
+            break
+        
+        if not batch:
+            break
+        
+        for sr in batch:
+            tid = str(sr.get("ticket_id", ""))
+            if not tid:
+                continue
+            csat_val = _parse_csat_ratings(sr.get("ratings"))
+            if csat_val is not None:
+                result[tid] = csat_val
+        
+        logger.info(f"CSAT page {page}: {len(batch)} records (total so far: {len(result)})")
+        
+        if len(batch) < 100:
+            break
+        page += 1
+        await asyncio.sleep(0.2)
+    
+    return result
+
+
+def _parse_csat_ratings(ratings: dict | None) -> int | None:
+    """Parse Freshdesk ratings dict → int 1-4."""
+    if not ratings:
+        return None
+    raw = ratings.get("default_question")
+    if raw is None:
+        return None
+    mapping = {
+        "unhappy":         1,
+        "neutral":         2,
+        "somewhat_happy":  2,
+        "happy":           3,
+        "extremely_happy": 4,
+    }
+    if isinstance(raw, int):
+        return raw if 1 <= raw <= 4 else None
+    return mapping.get(str(raw).lower().strip())
+
+
+async def fetch_ticket_csat(ticket_id: str) -> int | None:
+    """Fetch CSAT for a single ticket via the individual ticket endpoint."""
+    try:
+        url = f"https://{settings.freshdesk_domain}/api/v2/tickets/{ticket_id}"
+        data = await fd_get(url)
+        sr = data.get("satisfaction_rating")
+        if not sr:
+            return None
+        return _parse_csat_ratings(sr.get("ratings") or sr)
+    except Exception as e:
+        logger.debug(f"CSAT fetch skipped for #{ticket_id}: {e}")
+        return None
+
