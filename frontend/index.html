@@ -374,7 +374,7 @@ details[open] summary::after { content: ' ▴'; }
 <div class="tab-content" id="tab-tix">
   <div class="card"><h3>Evaluated Tickets <span id="tix-count" style="color:var(--dim);font-family:var(--mono);font-size:10px"></span></h3>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>ID</th><th>Agent</th><th>Group</th><th>Score</th><th>Churn</th><th>Contact</th><th>CSAT</th><th>Coaching Tip</th></tr></thead>
+      <thead><tr><th>ID</th><th>Agent</th><th>Group</th><th>Score</th><th>Churn</th><th>Contact</th><th>CSAT</th><th>Coaching Tip</th><th style="text-align:center">QA</th></tr></thead>
       <tbody id="tbl-body"></tbody>
     </table></div>
     <div class="pg" id="tbl-pg"></div>
@@ -2278,7 +2278,12 @@ function renderTix() {
       <td style="text-align:center">${e.churn_risk_flag ? '🚨' : '<span style="color:var(--dim)">—</span>'}</td>
       <td style="text-align:center">${e.contact_problem_flag ? '⚠️' : '<span style="color:var(--dim)">—</span>'}</td>
       <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${e.csat||'—'}</td>
-      <td style="font-size:11px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)">${e.coaching_tip||''}</td>
+      <td style="font-size:11px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)">${e.coaching_tip||''}</td>
+      <td style="text-align:center;padding:6px 8px">
+        <button onclick="event.stopPropagation();launchQaf('${e.ticket_id}')"
+          title="Run QA Framework"
+          style="background:var(--txt);color:#fff;border:none;border-radius:var(--r-pill);padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer;line-height:1.6">&#9733;</button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -2359,6 +2364,12 @@ function renderAg() {
       <td style="text-align:right">${UI.trendBadge(a.trend)}</td>
       <td style="text-align:right;font-family:var(--mono);font-weight:700;color:${churnColor}">${a.churnPct}%</td>
       <td style="text-align:center">${UI.riskBadge(a.risk)}</td>
+      <td style="text-align:center;padding:6px 8px">
+        <button data-ag-qaf="${a.name.replace(/[`"]/g,'?')}"
+          onclick="event.stopPropagation();_launchQafForAgent(this.dataset.agQaf)"
+          title="Run QA Framework on this agent's top ticket"
+          style="background:var(--txt);color:#fff;border:none;border-radius:var(--r-pill);padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer;line-height:1.6">&#9733;</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -2613,6 +2624,11 @@ async function showTicket(tid) {
         onclick="closeModal();launchFqa('${tid}')"
         style="flex:1;justify-content:center">
         🔬 Full Analysis
+      </button>
+      <button class="btn btn-sm"
+        onclick="closeModal();launchQaf('${tid}')"
+        style="flex:1;justify-content:center;background:var(--txt);color:#fff;border:none">
+        &#9733; QA Framework
       </button>
     </div>`;
   document.getElementById('modal').classList.add('open');
@@ -4846,6 +4862,25 @@ function _renderQaf(d) {
       </div>`).join('');
 
   document.getElementById('qaf-result').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// QA Framework agent helper
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * _launchQafForAgent(agentName) — pick the agent's best ticket and launch QAF.
+ * Prefers churn-flagged tickets (highest coaching value), falls back to lowest score.
+ */
+function _launchQafForAgent(agentName) {
+  const tix = _evals.filter(e => e.agent_name === agentName);
+  if (!tix.length) { alert('No tickets found for: ' + agentName); return; }
+  tix.sort((a, b) => {
+    if (a.churn_risk_flag !== b.churn_risk_flag) return b.churn_risk_flag ? 1 : -1;
+    return (a.total_score || 0) - (b.total_score || 0);
+  });
+  launchQaf(tix[0].ticket_id);
 }
 
 </script>
