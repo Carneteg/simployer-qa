@@ -156,9 +156,13 @@ async def get_run(
     return RunOut.from_orm(run)
 
 
+class BackfillCsatRequest(BaseModel):
+    days_back: int = 30
+
+
 @router.post("/backfill-csat")
 async def backfill_csat(
-    days_back: int = 30,
+    req: BackfillCsatRequest = BackfillCsatRequest(),
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -175,7 +179,7 @@ async def backfill_csat(
 
     # Fetch tickets from Freshdesk (now includes satisfaction_ratings)
     try:
-        fd_tickets = await fetch_all_tickets(days_back=days_back)
+        fd_tickets = await fetch_all_tickets(days_back=req.days_back)
     except Exception as e:
         raise HTTPException(500, f"Freshdesk fetch failed: {e}")
 
