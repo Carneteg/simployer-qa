@@ -298,3 +298,32 @@ async def csat_probe(
             results[f"page_{page}"] = {"error": str(e)}
 
     return results
+
+
+@router.get("/survey-config")
+async def survey_config(
+    survey_id: int = 201000046125,
+    user: User = Depends(current_user),
+):
+    """Fetch Freshdesk survey definition to decode option IDs."""
+    from services.freshdesk import fd_get
+    from config import settings
+
+    results = {}
+
+    # 1. Try GET /api/v2/surveys/:id
+    try:
+        url = f"https://{settings.freshdesk_domain}/api/v2/surveys/{survey_id}"
+        data = await fd_get(url)
+        results["survey_endpoint"] = data
+    except Exception as e:
+        results["survey_endpoint_error"] = str(e)
+
+    # 2. Try GET /api/v2/surveys
+    try:
+        data2 = await fd_get(f"https://{settings.freshdesk_domain}/api/v2/surveys")
+        results["surveys_list"] = data2
+    except Exception as e:
+        results["surveys_list_error"] = str(e)
+
+    return results
