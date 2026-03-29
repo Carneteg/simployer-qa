@@ -267,6 +267,7 @@ details[open] summary::after { content: ' ▴'; }
 /* legacy compat */
 .user-pill { font-size: 12px; font-weight: 500; color: var(--dim); background: var(--s1); border: 1px solid var(--bdr); border-radius: var(--r-pill); padding: 4px 14px; }
 </style>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
 </head>
 <body>
 
@@ -1710,6 +1711,7 @@ const Filter = {
   apply(evals, f) {
     return evals.filter(e => {
       if (f.churnOnly && !e.churn_risk_flag) return false;
+      if (f.csatBad  && e.csat !== 1) return false;
       if (f.group && e.group_name !== f.group) return false;
       if (f.minScore > 0 && (e.total_score || 0) < f.minScore) return false;
       if (f.search) {
@@ -1901,6 +1903,7 @@ const FilterBar = {
     this.render(this.activeTab);
   },
   reset() {
+    State.setFilter('csatBad', false);
     ['search','group','dateFrom','dateTo'].forEach(k=>State.setFilter(k,''));
     State.setFilter('churnOnly',false);
     State.setFilter('minScore',0);
@@ -1953,6 +1956,18 @@ async function doLogin() {
 }
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function _toast(msg, type='ok', duration=4000) {
+  const el = document.createElement('div');
+  const bg = type==='ok'?'var(--ok)':type==='err'?'var(--danger)':'var(--warn)';
+  el.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 18px;
+    border-radius:var(--r-md);background:${bg};color:#fff;font-size:13px;font-weight:600;
+    box-shadow:0 4px 20px rgba(0,0,0,.25);transition:opacity .3s;max-width:320px;line-height:1.5`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; setTimeout(()=>el.remove(), 300); }, duration);
+}
+
 
 function doLogout() {
   sessionStorage.removeItem('qa_token');
@@ -2171,6 +2186,8 @@ function openRunSocket(runId) {
         await loadRunHistory();
         document.getElementById('run-btn').disabled = false;
         document.getElementById('run-btn').textContent = '▶ Run Again';
+        // Show toast notification
+        _toast(`✅ Run complete — ${d.done} tickets · ${d.churn} churn flags`, 'ok', 6000);
         showTab('ov');
       } else if (d.status === 'failed') {
         rlog('❌ Failed: ' + d.error, 'err');
