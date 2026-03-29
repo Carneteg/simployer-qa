@@ -362,6 +362,7 @@ details[open] summary::after { content: ' ▴'; }
     <div class="st"><div class="stl">Churn Risk</div><div class="stv vd" id="s2">—</div></div>
     <div class="st"><div class="stl">ARR at Risk</div><div class="stv vw" id="s3">—</div></div>
     <div class="st"><div class="stl">Contact Probs</div><div class="stv vw" id="s4">—</div></div>
+    <div class="st"><div class="stl">Avg CSAT</div><div class="stv vo" id="s5">—</div></div>
   </div>
   <div class="tc">
     <div class="card"><h3>Category Averages</h3><div id="cat-bars"></div></div>
@@ -433,6 +434,8 @@ details[open] summary::after { content: ' ▴'; }
               <th class="sort-th" id="ath-trend" onclick="setAgSort('trendDelta')" style="text-align:right">Trend</th>
               <th class="sort-th" id="ath-churn" onclick="setAgSort('churnPct')" style="text-align:right">Churn%</th>
               <th class="sort-th" id="ath-risk" onclick="setAgSort('riskLevel')" style="text-align:center">Risk</th>
+              <th style="text-align:center;font-size:10px;color:var(--dim)">CSAT</th>
+              <th style="text-align:center;font-size:10px">QAF</th>
             </tr>
           </thead>
           <tbody id="ag-tbody"></tbody>
@@ -1785,7 +1788,10 @@ const AgentAnalytics = {
       const showScore = count >= this.MIN_TICKETS;
       const trendDelta = trend ? trend.delta : null;
       const riskLevel  = ['unknown','low','medium','mismatch','high'].indexOf(risk.level);
-      return { ...a, count, avg, churnPct, trend, trendDelta, risk, riskLevel, coaching, showScore };
+      const csatTickets = a.tickets.filter(t => t.csat > 0);
+      const csatAvg = csatTickets.length
+        ? parseFloat((csatTickets.reduce((s,t)=>s+t.csat,0)/csatTickets.length).toFixed(1)) : null;
+      return { ...a, count, avg, churnPct, trend, trendDelta, risk, riskLevel, coaching, showScore, csatAvg, csatN: csatTickets.length };
     });
   },
 
@@ -2259,7 +2265,7 @@ function renderOv() {
       const el = document.getElementById(id);
       if (el) el.innerHTML = UI.skeleton(5, [80,65,90,55,70]);
     });
-    ['s0','s1','s2','s3','s4'].forEach(id => {
+    ['s0','s1','s2','s3','s4','s5'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.textContent = '—';
     });
@@ -2287,6 +2293,17 @@ function renderOv() {
       }
     }).catch(() => { document.getElementById('s3').textContent = '—'; });
   document.getElementById('s4').textContent = coN;
+  // CSAT tile — avg score for tickets that have responses (1-4 scale)
+  const csatVals = _evals.map(e => e.csat).filter(v => v != null && v > 0);
+  if (csatVals.length) {
+    const csatAvg = (csatVals.reduce((a,b) => a+b, 0) / csatVals.length).toFixed(1);
+    const csatEl  = document.getElementById('s5');
+    csatEl.textContent = csatAvg + ' (' + csatVals.length + ')';
+    csatEl.className   = 'stv ' + (csatAvg >= 3.5 ? 'vo' : csatAvg >= 2.5 ? 'vw' : 'vd');
+    csatEl.title = csatVals.length + ' responses — 4=Happy, 3=Somewhat Happy, 2=Neutral, 1=Unhappy';
+  } else {
+    document.getElementById('s5').textContent = '—';
+  }
 
   const catA = {};
   for (const cat of Object.keys(CATS)) {
@@ -2434,6 +2451,11 @@ function renderAg() {
       <td style="text-align:right">${UI.trendBadge(a.trend)}</td>
       <td style="text-align:right;font-family:var(--mono);font-weight:700;color:${churnColor}">${a.churnPct}%</td>
       <td style="text-align:center">${UI.riskBadge(a.risk)}</td>
+      <td style="text-align:center;font-family:var(--mono);font-size:11px">
+        ${a.csatAvg != null
+          ? `<span title="${a.csatN} responses" style="color:${a.csatAvg>=3.5?'var(--ok)':a.csatAvg>=2.5?'var(--warn)':'var(--danger)'}">${a.csatAvg}</span>`
+          : '<span style="color:var(--dim)">—</span>'}
+      </td>
       <td style="text-align:center;padding:6px 8px">
         <button data-ag-qaf="${a.name.replace(/[`"]/g,'?')}"
           onclick="event.stopPropagation();_launchQafForAgent(this.dataset.agQaf)"
