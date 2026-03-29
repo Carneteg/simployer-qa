@@ -1887,6 +1887,7 @@ const FilterBar = {
         placeholder="Min score" value="${f.minScore||''}"
         title="Minimum QA score" onchange="FilterBar.onInput()" style="width:82px">
       <button class="ft${f.churnOnly?' on':''}" onclick="FilterBar.toggleChurn()">🚨 Churn</button>
+      <button class="ft${f.csatBad?' on':''}" onclick="FilterBar.toggleCsatBad()" title="Show unhappy CSAT tickets">😞 CSAT 1</button>
       <button class="ft" onclick="FilterBar.reset()">✕ Reset</button>
       <span class="fc">${shown<total?`<strong style="color:var(--ac2)">${shown}</strong> / ${total}`:total} tickets</span>
     `;
@@ -1900,6 +1901,10 @@ const FilterBar = {
   },
   toggleChurn() {
     State.setFilter('churnOnly', !State._filters.churnOnly);
+    this.render(this.activeTab);
+  },
+  toggleCsatBad() {
+    State.setFilter('csatBad', !State._filters.csatBad);
     this.render(this.activeTab);
   },
   reset() {
@@ -2616,7 +2621,13 @@ async function showAgent(name) {
 
 function renderCh() {
   // Use filtered evals, then further filter for churn
-  const ch = State.filtered.filter(e => e.churn_risk_flag);
+  const ch = State.filtered
+    .filter(e => e.churn_risk_flag)
+    .sort((a, b) => {
+      const ca = a.csat || 99, cb = b.csat || 99;
+      if (ca !== cb) return ca - cb;
+      return (a.total_score || 0) - (b.total_score || 0);
+    });
   const listEl = document.getElementById('ch-list');
   if (!listEl) return;
 
@@ -2662,6 +2673,7 @@ function renderCh() {
           ${e.group_name ? `<span style="font-size:10px;color:var(--dim);margin-left:6px">(${e.group_name})</span>` : ''}
         </div>
         <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${riskColor}">${e.total_score}</span>
+        ${e.csat ? `<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:${e.csat>=3?'rgba(34,197,94,.15)':e.csat===2?'rgba(251,191,36,.15)':'rgba(248,113,113,.25)'};color:${e.csat>=3?'var(--ok)':e.csat===2?'var(--warn)':'var(--danger)'}">CSAT ${e.csat}</span>` : ''}
       </div>
       ${e.churn_risk_reason ? `<div style="font-size:12px;color:var(--dim);margin-bottom:3px">${e.churn_risk_reason}</div>` : ''}
       ${e.coaching_tip ? `<div style="font-size:11px;color:var(--warn)">→ ${e.coaching_tip}</div>` : ''}
@@ -2707,7 +2719,9 @@ async function showTicket(tid) {
 
   document.getElementById('modal-body').innerHTML = `
     <div style="font-family:var(--disp);font-size:18px;font-weight:800;margin-bottom:4px">#${tid}</div>
-    <div style="font-size:12px;color:var(--dim);margin-bottom:12px">${e.agent_name||''} · ${e.group_name||''} · <strong style="color:var(--ac2)">${e.total_score}/100</strong></div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:12px">${e.agent_name||''} · ${e.group_name||''} · <strong style="color:var(--ac2)">${e.total_score}/100</strong>
+      ${e.csat ? `<span style="margin-left:8px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;background:${e.csat>=3?'rgba(34,197,94,.15)':e.csat>=2?'rgba(251,191,36,.15)':'rgba(248,113,113,.2)'};color:${e.csat>=3?'var(--ok)':e.csat>=2?'var(--warn)':'var(--danger)'}">CSAT ${e.csat}/4</span>` : ''}
+    </div>
     ${e.churn_risk_flag?`<div style="padding:9px 13px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;color:var(--danger);font-size:12px;margin-bottom:10px">🚨 ${e.churn_risk_reason}</div>`:''}
     <div style="margin-bottom:10px">
       <strong style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Summary</strong>
