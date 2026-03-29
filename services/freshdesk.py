@@ -389,22 +389,51 @@ async def fetch_all_csat_ratings(days_back: int = 180) -> tuple[dict, dict]:
 
 
 def _parse_csat_ratings(ratings: dict | None) -> int | None:
-    """Parse Freshdesk ratings dict → int 1-4."""
+    """
+    Parse Freshdesk ratings dict → int 1-4.
+
+    Freshdesk uses numeric option IDs, not strings:
+      103  = Happy / Satisfied            → 4
+      102  = Somewhat Happy               → 3
+      101  = Neutral (5-scale surveys)    → 3
+      100  = Neutral                      → 2
+     -101  = Somewhat Unhappy             → 2
+     -102  = Unhappy                      → 1
+     -103  = Very Unhappy / Dissatisfied  → 1
+
+    Active survey "3 alternatives CSAT" uses [-103, 100, 103].
+    Legacy string values also supported for older records.
+    """
     if not ratings:
         return None
     raw = ratings.get("default_question")
     if raw is None:
         return None
-    mapping = {
-        "unhappy":         1,
-        "neutral":         2,
-        "somewhat_happy":  2,
-        "happy":           3,
-        "extremely_happy": 4,
+
+    # Numeric Freshdesk option IDs (current format)
+    numeric_map = {
+        103:  4,   # Happy / Satisfied
+        102:  3,   # Somewhat Happy
+        101:  3,   # Neutral-positive (5-scale)
+        100:  2,   # Neutral
+        -101: 2,   # Somewhat Unhappy
+        -102: 1,   # Unhappy
+        -103: 1,   # Very Unhappy / Dissatisfied
     }
     if isinstance(raw, int):
-        return raw if 1 <= raw <= 4 else None
-    return mapping.get(str(raw).lower().strip())
+        return numeric_map.get(raw)
+
+    # Legacy string values (older Freshdesk accounts / API versions)
+    string_map = {
+        "extremely_happy": 4,
+        "happy":           4,
+        "somewhat_happy":  3,
+        "neutral":         2,
+        "somewhat_unhappy": 2,
+        "unhappy":         1,
+        "extremely_unhappy": 1,
+    }
+    return string_map.get(str(raw).lower().strip())
 
 
 async def fetch_ticket_csat(ticket_id: str) -> int | None:

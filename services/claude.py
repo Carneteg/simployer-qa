@@ -52,9 +52,8 @@ def _build_prompt(ticket: Dict, thread: List[Dict]) -> str:
     agent_name = ticket.get("_agent_name") or (ticket.get("responder") or {}).get("name", "Unknown")
     group_name = ticket.get("_group_name") or (ticket.get("group") or {}).get("name", "Unknown")
     _sr        = ticket.get("satisfaction_rating")
-    _sr_raw    = ((_sr or {}).get("ratings") or {}).get("default_question")
-    _csat_map  = {"unhappy":1,"neutral":2,"somewhat_happy":2,"happy":3,"extremely_happy":4}
-    csat       = _csat_map.get(str(_sr_raw).lower().strip()) if _sr_raw else "N/A"
+    from services.freshdesk import _parse_csat_ratings
+    csat       = _parse_csat_ratings((_sr or {}).get("ratings") or {}) or "N/A"
 
     # Truncate aggressively: 6 turns, 200 chars each — keeps tokens predictable
     trimmed = "\n".join(
