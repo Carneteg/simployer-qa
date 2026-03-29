@@ -33,7 +33,6 @@ from models import Run, Ticket, Message, Evaluation
 from services.freshdesk import (
     fetch_all_tickets, fetch_conversations,
     build_thread, detect_churn, is_confirmed_churn, fetch_company,
-    fetch_ticket_csat,
 )
 from services.claude import eval_ticket
 
@@ -194,7 +193,7 @@ async def _process_ticket(
                     ),
                     status=ticket.get("status"),
                     priority=ticket.get("priority"),
-                    csat=(await fetch_ticket_csat(ticket_id)),
+                    csat=None,  # populated by /runs/backfill-csat after run completes
                     tags=ticket.get("tags") or [],
                     fr_escalated=bool(ticket.get("fr_escalated")),
                     nr_escalated=bool(ticket.get("nr_escalated")),
@@ -506,6 +505,30 @@ async def evaluate_run(ctx: dict, run_id: str) -> None:
             "done":  counters["done"], "total": len(tickets),
             "churn": counters["churn"], "pct": 100,
         }))
+
+        # Auto-backfill CSAT after run completes (avoids per-ticket HTTP calls during run)
+        try:
+            from services.freshdesk import fetch_all_csat_ratings
+            csat_map, _ = await fetch_all_csat_ratings(days_back=30)
+            if csat_map:
+                async with AsyncSessionLocal() as csat_db:
+                    result = await csat_db.execute(
+                        __import__('sqlalchemy').select(
+                            __import__('models', fromlist=['Ticket']).Ticket
+                        ).where(
+                            __import__('models', fromlist=['Ticket']).Ticket.user_id == user_id
+                        )
+                    )
+                    db_tickets = result.scalars().all()
+                    csat_updated = 0
+                    for t in db_tickets:
+                        if str(t.id) in csat_map:
+                            t.csat = csat_map[str(t.id)]
+                            csat_updated += 1
+                    await csat_db.commit()
+                    logger.info(f"[run={run_id}] CSAT backfill: {csat_updated} tickets updated")
+        except Exception as csat_err:
+            logger.warning(f"[run={run_id}] CSAT backfill failed (non-fatal): {csat_err}")
 
         logger.info(
             f"[run={run_id}] ✅ DONE — "
