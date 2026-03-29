@@ -479,56 +479,135 @@ details[open] summary::after { content: ' ▴'; }
 </head>
 <body>
 
-<!-- LOGIN -->
+<!-- ═══════════════════════════════════════════════════
+     LOGIN PAGE — Simployer brand
+     ═══════════════════════════════════════════════════ -->
 <div class="login-wrap" id="login-screen">
-  <div class="login-card">
-    <div class="login-logo"><img src="https://www.simployer.com/hubfs/Web%202024/Logotype%20-%20Text.svg" alt="Simployer" style="height:26px;display:block;margin-bottom:10px" onerror="this.style.display='none'"><span style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--purple);letter-spacing:.2px">QA Intelligence</span></div>
-    <div class="login-sub">Automated QA · SLA analysis · Confidence model</div>
-    <div class="lf"><label>Email</label><input id="l-email" type="email" placeholder="you@simployer.com" autocomplete="email"/></div>
-    <div class="lf"><label>Password</label><input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
-    <div class="login-err" id="login-err"></div>
-    <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Sign In</button>
-  </div>
-</div>
-
-<!-- APP -->
+  <div class="login-left">
+    <div class="login-brand">
+      <div class="login-brand-icon">✦</div>
+      <span class="login-brand-name">Simployer</span>
+      <span class="login-brand-badge">QA</span>
+    </div>
+    <div class="login-hero">
+      <h1>Quality Intelligence<br>for Customer Support</h1>
+      <p>Automated QA scoring, SLA analysis, churn risk detection, and lifecycle intelligence — powered by AI and built for Nordic support teams.</p>
 <div class="app-wrap" id="app-screen">
-<header>
-  <div class="header-inner">
-    <div style="display:flex;align-items:center;gap:12px">
-      <img src="https://www.simployer.com/hubfs/Web%202024/Logotype%20-%20Text.svg" alt="Simployer" style="height:22px;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-      <div class="logo" style="display:none">Simployer <span>QA</span></div>
-      <span class="logo-badge">QA Intelligence</span>
-    </div>
-    <div class="hdr-right">
-      <div class="user-pill" id="user-pill">—</div>
-      <button class="btn btn-outline btn-sm" onclick="doExport('xlsx')" style="border-radius:var(--r-pill)">⬇ Export</button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()" style="color:var(--danger);border-color:rgba(229,55,74,.3)">Sign Out</button>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div>
+      <img src="https://www.simployer.com/hubfs/Web%202024/Logotype%20-%20Text.svg" alt="Simployer" style="height:18px;filter:brightness(0) invert(1);opacity:.85;display:block;margin-bottom:4px" onerror="this.style.display='none'">
+      <span class="sidebar-badge">QA Intelligence</span>
     </div>
   </div>
-</header>
 
-<div class="tabs">
-  <div class="tab active" onclick="showTab('ov')">Overview</div>
-  <div class="tab" onclick="showTab('tix')">Tickets</div>
-  <div class="tab" onclick="showTab('ag')">Agents</div>
-  <div class="tab" onclick="showTab('ch')">Churn Risk</div>
-  <div class="tab" onclick="showTab('runs')">Runs</div>
-  <div class="tab" onclick="showTab('exp')">Export</div>
-  <div class="tab" onclick="showTab('score')">Manual Review</div>
-  <div class="tab" onclick="showTab('agrev')">Agent Review</div>
-  <div class="tab" onclick="showTab('cat')">Categories</div>
-  <div class="tab" onclick="showTab('qas')">QA Summary</div>
-  <div class="tab" onclick="showTab('imp')">Improvements</div>
-  <div class="tab" onclick="showTab('fqa')">Full Analysis</div>
-  <div class="tab" onclick="showTab('iqa')">Issue Analysis</div>
-  <div class="tab" onclick="showTab('sc2')">QA Scorecard</div>
-  <div class="tab" onclick="showTab('ci')">Customer Intel</div>
-  <div class="tab" onclick="showTab('excl')">Exclusions</div>
+  <div class="nav-body">
+    <div class="nav-section">
+      <div class="nav-section-label">Monitor</div>
+      <div class="nav-item active" id="nav-ov"   onclick="showTab('ov')">  <span class="nav-icon">◉</span>Overview</div>
+      <div class="nav-item"        id="nav-tix"  onclick="showTab('tix')"> <span class="nav-icon">≡</span>Tickets</div>
+      <div class="nav-item"        id="nav-ag"   onclick="showTab('ag')">  <span class="nav-icon">◎</span>Agents</div>
+      <div class="nav-item"        id="nav-ch"   onclick="showTab('ch')">  <span class="nav-icon">△</span>Churn Risk</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Analyze</div>
+      <div class="nav-item" id="nav-score"  onclick="showTab('score')"><span class="nav-icon">✦</span>Manual Review</div>
+      <div class="nav-item" id="nav-agrev"  onclick="showTab('agrev')"><span class="nav-icon">✧</span>Agent Review</div>
+      <div class="nav-item" id="nav-fqa"    onclick="showTab('fqa')">  <span class="nav-icon">⊕</span>Full Analysis</div>
+      <div class="nav-item" id="nav-iqa"    onclick="showTab('iqa')">  <span class="nav-icon">⊗</span>Issue Analysis</div>
+      <div class="nav-item" id="nav-sc2"    onclick="showTab('sc2')">  <span class="nav-icon">⚖</span>QA Scorecard</div>
+      <div class="nav-item" id="nav-ci"     onclick="showTab('ci')">   <span class="nav-icon">◌</span>Customer Intel</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Intelligence</div>
+      <div class="nav-item" id="nav-cat"  onclick="showTab('cat')"> <span class="nav-icon">⊞</span>Categories</div>
+      <div class="nav-item" id="nav-qas"  onclick="showTab('qas')"> <span class="nav-icon">▦</span>QA Summary</div>
+      <div class="nav-item" id="nav-imp"  onclick="showTab('imp')"> <span class="nav-icon">↑</span>Improvements</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Manage</div>
+      <div class="nav-item" id="nav-runs"  onclick="showTab('runs')"><span class="nav-icon">▶</span>Runs</div>
+      <div class="nav-item" id="nav-exp"   onclick="showTab('exp')"> <span class="nav-icon">↓</span>Export</div>
+      <div class="nav-item" id="nav-excl"  onclick="showTab('excl')"><span class="nav-icon">⊘</span>Exclusions</div>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-user"><strong id="sidebar-user-email">—</strong></div>
+    <button class="btn btn-sm" onclick="doLogout()" style="width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:11px;padding:7px 12px;margin-top:4px">Sign out</button>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<div class="main-content">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div>
+    <div class="topbar-title" id="topbar-title">Overview</div>
+    <div class="topbar-sub"   id="topbar-sub">Platform health and QA metrics</div>
+  </div>
+  <div class="topbar-right">
+    <span id="topbar-status" style="font-size:11px;color:var(--dim)"></span>
+    <button class="btn btn-sm btn-primary" id="topbar-run-btn" onclick="showTab('runs')" style="display:none">▶ New Run</button>
+  </div>
 </div>
+
+<!-- PAGE BODY -->
+<div class="page-body">
 
 <!-- FILTER BAR (shown for tix / ag / ch tabs) -->
 <div class="filter-bar" id="filter-bar" style="display:none"></div>
+
+
+      </div>
+      <span class="app-header-badge">QA Intelligence</span>
+    </div>
+    <div class="app-header-right">
+      <div class="user-pill" id="user-pill">—</div>
+      <button class="btn btn-outline btn-sm" onclick="doExport('xlsx')">⬇ Export</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()" style="color:var(--danger);border-color:rgba(220,38,38,.25)">Sign Out</button>
+    </div>
+  </header>
+  <div class="app-body">
+    <nav class="sidebar" id="app-sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Quality</div>
+        <div class="sidebar-item active" id="nav-ov"   onclick="showTab('ov')"><span class="sidebar-icon">◈</span>Overview</div>
+        <div class="sidebar-item" id="nav-tix"  onclick="showTab('tix')"><span class="sidebar-icon">◉</span>Tickets</div>
+        <div class="sidebar-item" id="nav-ag"   onclick="showTab('ag')"><span class="sidebar-icon">◎</span>Agents</div>
+        <div class="sidebar-item" id="nav-ch"   onclick="showTab('ch')"><span class="sidebar-icon">⚠</span>Churn Risk</div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Analysis</div>
+        <div class="sidebar-item" id="nav-qas"  onclick="showTab('qas')"><span class="sidebar-icon">∑</span>QA Summary</div>
+        <div class="sidebar-item" id="nav-imp"  onclick="showTab('imp')"><span class="sidebar-icon">↑</span>Improvements</div>
+        <div class="sidebar-item" id="nav-cat"  onclick="showTab('cat')"><span class="sidebar-icon">⊞</span>Categories</div>
+        <div class="sidebar-item" id="nav-fqa"  onclick="showTab('fqa')"><span class="sidebar-icon">✦</span>Full Analysis</div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">AI Tools</div>
+        <div class="sidebar-item" id="nav-score" onclick="showTab('score')"><span class="sidebar-icon">☑</span>Manual Review</div>
+        <div class="sidebar-item" id="nav-agrev" onclick="showTab('agrev')"><span class="sidebar-icon">◑</span>Agent Review</div>
+        <div class="sidebar-item" id="nav-sc2"  onclick="showTab('sc2')"><span class="sidebar-icon">⚖</span>QA Scorecard</div>
+        <div class="sidebar-item" id="nav-iqa"  onclick="showTab('iqa')"><span class="sidebar-icon">⚡</span>Issue Analysis</div>
+        <div class="sidebar-item" id="nav-ci"   onclick="showTab('ci')"><span class="sidebar-icon">🔭</span>Customer Intel</div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Operations</div>
+        <div class="sidebar-item" id="nav-runs" onclick="showTab('runs')"><span class="sidebar-icon">▶</span>Runs</div>
+        <div class="sidebar-item" id="nav-exp"  onclick="showTab('exp')"><span class="sidebar-icon">⬇</span>Export</div>
+        <div class="sidebar-item" id="nav-excl" onclick="showTab('excl')"><span class="sidebar-icon">⊘</span>Exclusions</div>
+      </div>
+    </nav>
+    <main class="main-content" id="main-content">
+      <div class="filter-bar" id="filter-bar" style="display:none"></div>
+      <div class="main-inner">
 
 <!-- OVERVIEW -->
 <div class="tab-content active" id="tab-ov">
@@ -2025,12 +2104,16 @@ async function doLogin() {
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-function logout() {
+function doLogout() {
   sessionStorage.removeItem('qa_token');
   _token = null; _user = null; _evals = [];
   document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app-screen').style.display = 'none';
+  const appEl = document.getElementById('app-screen');
+  appEl.classList.remove('visible');
+  appEl.style.display = 'none';
 }
+// legacy alias
+function logout() { doLogout(); }
 
 // ═══════════════════════════════════════════════════════════
 // INIT
@@ -2040,8 +2123,20 @@ async function initApp() {
     _user = await apiFetch('/auth/me');
     if (!_user) return;
     document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'block';
-    document.getElementById('user-pill').textContent = _user.email;
+    const appEl = document.getElementById('app-screen');
+    appEl.style.display = '';
+    appEl.classList.add('visible');
+    // Update sidebar user email
+    const sidebarEmail = document.getElementById('sidebar-user-email');
+    if (sidebarEmail) sidebarEmail.textContent = _user.email;
+    // Legacy pill (may not exist in new layout)
+    const pill = document.getElementById('user-pill');
+    if (pill) pill.textContent = _user.email;
+    // Show run button in topbar after load
+    setTimeout(() => {
+      const runBtn = document.getElementById('topbar-run-btn');
+      if (runBtn) runBtn.style.display = 'inline-flex';
+    }, 2000);
     await Promise.all([loadEvals(), loadRunHistory()]);
   } catch(e) {
     document.getElementById('login-err').textContent = 'Error: ' + e.message;
@@ -2085,11 +2180,48 @@ if (_token) initApp();
 // ═══════════════════════════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════════════════════════
+// Tab → topbar metadata
+const PAGE_META = {
+  'ov':    {title:'Overview',        sub:'Platform health and QA metrics'},
+  'tix':   {title:'Tickets',         sub:'All evaluated support tickets'},
+  'ag':    {title:'Agents',          sub:'Agent performance and churn risk profiles'},
+  'ch':    {title:'Churn Risk',      sub:'Tickets flagged for churn or cancellation risk'},
+  'runs':  {title:'Runs',            sub:'Start analysis runs and view history'},
+  'exp':   {title:'Export',          sub:'Download results as Excel, JSON or CSV'},
+  'score': {title:'Manual Review',   sub:'Generate AI scorecard for any ticket'},
+  'agrev': {title:'Agent Review',    sub:'Deep-dive pattern analysis by agent'},
+  'cat':   {title:'Categories',      sub:'Churn risk grouped by tag and support group'},
+  'qas':   {title:'QA Summary',      sub:'AI-generated leadership summary across all tickets'},
+  'imp':   {title:'Improvements',    sub:'Priority improvement areas and recommendations'},
+  'fqa':   {title:'Full Analysis',   sub:'Combined ticket + agent + summary + improvements'},
+  'iqa':   {title:'Issue Analysis',  sub:'QA Manager breakdown of any reported system issue'},
+  'sc2':   {title:'QA Scorecard',    sub:'Priority-aware SLA scoring with confidence model'},
+  'ci':    {title:'Customer Intel',  sub:'Lifecycle, root cause, churn risk and recommendations'},
+  'excl':  {title:'Exclusions',      sub:'Manage tickets excluded from QA measurement'},
+};
+
 function showTab(id) {
-  document.querySelectorAll('.tab,.tab-content').forEach(el => el.classList.remove('active'));
-  const idx = ['ov','tix','ag','ch','runs','exp','score','agrev','cat','qas','imp','fqa','iqa','sc2','ci','excl'].indexOf(id);
-  document.querySelectorAll('.tab')[idx]?.classList.add('active');
-  document.getElementById('tab-'+id)?.classList.add('active');
+  // Deactivate all tab-content and nav items
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+  // Activate the target tab content
+  document.getElementById('tab-' + id)?.classList.add('active');
+  // Activate the matching nav item
+  const navEl = document.getElementById('nav-' + id);
+  if (navEl) navEl.classList.add('active');
+
+  // Update topbar title + subtitle
+  const meta = PAGE_META[id] || {title: id, sub: ''};
+  const titleEl = document.getElementById('topbar-title');
+  const subEl   = document.getElementById('topbar-sub');
+  if (titleEl) titleEl.textContent = meta.title;
+  if (subEl)   subEl.textContent   = meta.sub;
+
+  // Show "New Run" button only on non-run pages
+  const runBtn = document.getElementById('topbar-run-btn');
+  if (runBtn) runBtn.style.display = id === 'runs' ? 'none' : 'inline-flex';
+
   FilterBar.render(id);
   if (id === 'runs') loadRunHistory();
   if (id === 'exp')  loadRunsForExport();
@@ -4673,5 +4805,7 @@ async function exclToggleManual(doExclude) {
 }
 
 </script>
+</div><!-- /page-body -->
+</div><!-- /main-content -->
 </body>
 </html>
